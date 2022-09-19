@@ -1,7 +1,8 @@
 #!/bin/bash
 #ratio_list=(0.01 0.05 0.1 0.2 0.3 0.4 0.6 0.8)
 batch_list=(6 12 24 48 64 96 128 256)
-lebeled_list=(0.01 0.1 0.2 0.4 0.8 1)
+lebeled_list=(0.6)
+#(0.01 0.1 0.2 0.4 0.6 0.8 1)
 #batch_size=256
 train_ratio=0.8
 for batch_size in "${batch_list[@]}"; do
