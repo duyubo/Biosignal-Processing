@@ -16,14 +16,14 @@ for labeled_data in "${lebeled_list[@]}"; do
           --first_stride 2 --mlp_hidden_size 128 --projection_size 64  --predictor_mlp_hidden_size 512 \
           --patience 10 --temperature 0.1\
           --train_ratio 0.8 --val_ratio 0.1 --test_ratio 0.1 --batch_size $batch_size \
-          --final_dim 4 --labeled_data $labeled_data --p1 0.2 --p2 0.2 --p3 0.2 > gridsearch_batch_labeled_pretrain.txt
+          --final_dim 4 --labeled_data $labeled_data --p1 0.2 --p2 0.2 --p3 0.2
   python3 supervised.py \
           --method PSL --backbone CNN --lr 0.0001 --epochs 1000 --dataset EEG109 \
           --dataset_path /home/yubo/BiosignalData/eeg_109_imagery.npy\
           --seq_length 646 --input_dim 64 --c2 128 --c3 128 --out_dim 64 --kernel 5\
           --stride 2 --first_kernel 5 --labeled_data $labeled_data \
           --first_stride 2 --patience 100 --train_ratio 0.8 --val_ratio 0.1 \
-          --test_ratio 0.1 --final_dim 4 --pretrained  > gridsearch_batch_labeled.txt
+          --test_ratio 0.1 --final_dim 4 --pretrained
 done
 done
 fi
@@ -37,14 +37,14 @@ for train_ratio in "${ratio_list[@]}"; do
           --first_stride 2 --mlp_hidden_size 128 --projection_size 64  --predictor_mlp_hidden_size 512 \
           --patience 10 --temperature 0.1\
           --train_ratio $train_ratio --val_ratio 0.1 --test_ratio 0.1 --batch_size $batch_size \
-          --final_dim 4 --labeled_data 1 --p1 0.2 --p2 0.2 --p3 0.2 > gridsearch_batch_subjects_pretrain.txt
+          --final_dim 4 --labeled_data 1 --p1 0.2 --p2 0.2 --p3 0.2
   python3 supervised.py \
           --method PSL --backbone CNN --lr 0.0001 --epochs 1000 --dataset EEG109 \
           --dataset_path /home/yubo/BiosignalData/eeg_109_imagery.npy\
           --seq_length 646 --input_dim 64 --c2 128 --c3 128 --out_dim 64 --kernel 5\
           --stride 2 --first_kernel 5 --labeled_data 1\
           --first_stride 2 --patience 100 --train_ratio $train_ratio --val_ratio 0.1 \
-          --test_ratio 0.1 --final_dim 4 --pretrained > gridsearch_batch_subjects.txt
+          --test_ratio 0.1 --final_dim 4 --pretrained
 done
 done
 fi
