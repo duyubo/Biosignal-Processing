@@ -39,7 +39,7 @@ def get_args_parser():
     parser.add_argument('--seq_length', default=646, type=int, help='images input size')
     parser.add_argument('--seed', default=0, type=int, help='pytorch random seed')
     parser.add_argument('--input_dim', type=int, default=64, help='input_dimension')
-    parser.add_argument('--path', type=str, default='/content/drive/MyDrive/Colab_Notebooks/Contrastive_Learning_Biosignal/', help='model path')
+    parser.add_argument('--path', type=str, default='./', help='model path')
     parser.add_argument('--out_dim', type=int, default=128, help='backboone output dimension')
     # CNN Backbone Parameters
     parser.add_argument('--p1', type=float, default=0.1, help='dropout')
