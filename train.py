@@ -70,7 +70,7 @@ def train(model: nn.Module, device, train_loader, scheduler, method, optimizer, 
         if method == 'SimCLR':
             data = torch.cat([data1, data2])
             data = data.to(device)
-            output = model(data, torch.arange(batch_Y.shape[0]).to(device))
+            output = model(data, torch.arange(batch_X.shape[0]).to(device))
         elif method == 'MAE':
             output = model(data, 0.05) 
         elif method == 'CLOCS' or method == 'PSL':
@@ -140,7 +140,7 @@ def evaluate(model: nn.Module, device, val_loader, method, moco_m = 0.996) -> fl
             if method == 'SimCLR':
                 data = torch.cat([data1, data2])
                 data = data.to(device)
-                output = model(data, torch.arange(batch_Y.shape[0]).to(device))
+                output = model(data, torch.arange(batch_X.shape[0]).to(device))
             elif method == 'MAE':
                 output = model(data, 0.05) 
             elif method == 'CLOCS' or method == 'PSL':
