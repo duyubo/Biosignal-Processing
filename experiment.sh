@@ -3,7 +3,7 @@ ratio_list=(0.01 0.05 0.1 0.2 0.3 0.4 0.6 0.8)
 batch_list=(64 128 256 512)
 lebeled_list=(0.01 0.1 0.2 0.4 0.6 0.8 1)
 
-ratio_batch_search=true
+ratio_batch_search=false
 ratio_all_batch_search=true
 label_batch_search=false
 
