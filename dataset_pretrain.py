@@ -81,18 +81,18 @@ class EEG109_Dataset(Dataset):
                     subject_signal.append(torch.from_numpy(data_temp))
                 if label_flag[i] == 0:
                     labels.append(-1)
-                    test_labels.append(data[s][l][1])
+                    test_labels.append(data[s][l][1] - 1)
                 else:
-                    labels.append(data[s][l][1])
-                    test_labels.append(data[s][l][1])
+                    labels.append(data[s][l][1] - 1)
+                    test_labels.append(data[s][l][1] - 1)
                 ids.append(s)
             subject_signal = torch.stack(subject_signal)
             mean = subject_signal.mean(dim = [1, 2], keepdim = True)
             std = subject_signal.std(dim = [1, 2], keepdim = True)
             subject_signal = (subject_signal - mean)/std
-            labels = torch.tensor(labels) - 1
+            labels = torch.tensor(labels)
             ids = torch.tensor(ids)
-            test_labels = torch.tensor(test_labels) - 1
+            test_labels = torch.tensor(test_labels)
 
             g = torch.Generator()
             g.manual_seed(args.seed)
@@ -132,7 +132,7 @@ class EEG109_Dataset(Dataset):
             self.test_labels.append(test_labels)
             length_flag += subject_signal.shape[0]
             #print(subject_signal.shape, labels.shape, len(ids), test_labels.shape)
-
+        
         self.eeg_signal = torch.cat(self.eeg_signal).float()
         print(self.eeg_signal.shape)
         self.reorder_index = torch.cat(self.reorder_index)
@@ -140,11 +140,19 @@ class EEG109_Dataset(Dataset):
         self.ids = torch.tensor(self.ids).long()
         self.test_labels = torch.cat(self.test_labels).long()
         print('Label Counter: ', dict(Counter(self.labels.numpy())))
+
+        g = torch.Generator()
+        g.manual_seed(args.seed)
+        indexes = torch.randperm(self.labels.shape[0], generator = g)
+        self.reorder_index = self.reorder_index[indexes]
+        self.labels = self.labels[indexes]
+        self.ids = self.ids[indexes]
+        self.test_labels = self.test_labels[indexes]
                    
         print(self.eeg_signal.shape, self.reorder_index.shape, self.ids.shape, self.labels.shape)
         
     def __len__(self):
-        return len(self.labels)
+        return int(len(self.labels) * 0.1)
   
     def __getitem__(self, index):
         if self.training_type == 'unsupervised':
