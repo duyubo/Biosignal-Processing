@@ -117,15 +117,19 @@ def get_args_parser():
     parser.add_argument('--dataset_path', default='/content/drive/MyDrive/Colab_Notebooks/MultiBench-main/data/EEG_Motery_and_imagery/eeg-motor-movementimagery-dataset-1/eeg_109.npy', type=str, help='Dataset Path')
     parser.add_argument('--training_type', default='supervised', type=str, help='training Type')
     parser.add_argument('--train_ratio', type=float, default=0.8, help='Training Data Ratio')
+    parser.add_argument('--train_ratio_all', type=float, default=0.8, help='Training Data Ratio All')
     parser.add_argument('--val_ratio', type=float, default=0.2, help='Validation Data Ratio')
     parser.add_argument('--test_ratio', type=float, default=0.2, help='Test Data Ratio')
     parser.add_argument('--labeled_data', type=float, default=0.1, help='Labeled Data Ratio')
+    parser.add_argument('--labeled_data_all', type=float, default=1, help='Labeled Data Ratio All')
     parser.add_argument('--split_stride', default=100, type=int, help='data split stride')
     
     return parser
 
 def main_supervised(args):
     print(args)
+    args.train_ratio_all = args.train_ratio
+    args.labeled_data_all = args.labeled_data
     torch.manual_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     method = args.method

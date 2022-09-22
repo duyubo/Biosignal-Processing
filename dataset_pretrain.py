@@ -12,112 +12,6 @@ import os
 import random
 from collections import Counter
 
-class Chapman_Dataset(Dataset):
-    def __init__(self, dataset_path = '/content/drive/MyDrive/Colab_Notebooks/MultiBench-main/data/ECG_chapman/contrastive_msml/leads/', 
-        split_type='train', training_type = 'unsupervised', labeled_data = 0.25):
-        super(Chapman_Dataset, self).__init__()
-        # split_type: train, val, test 
-        self.split_type = split_type
-        self.training_type = training_type
-        with open(dataset_path + 'frames_phases_chapman.pkl', 'rb') as f:
-            frames = pickle.load(f)
-        with open(dataset_path + 'labels_phases_chapman.pkl', 'rb') as f:
-            labels = pickle.load(f)
-        with open(dataset_path + 'pid_phases_chapman.pkl', 'rb') as f:
-            pids = pickle.load(f)
-        if (split_type == 'train') or (split_type == 'val') or (split_type == 'test'):
-            self.frames = frames['ecg'][1][split_type]['All Terms'] 
-            self.labels = labels['ecg'][1][split_type]['All Terms'] 
-            self.pids = pids['ecg'][1][split_type]['All Terms'] 
-        else:
-            raise NotImplementedError('no'+ split_type) 
-        if (split_type == 'train') and self.training_type == 'supervised':
-            l = int(self.labels.shape[0] * labeled_data)
-            self.frames = self.frames[:l]
-            self.labels = self.labels[:l]
-            self.pids = self.pids[:l]
-        print(self.frames.shape)
-        
-    def __len__(self):
-        return self.labels.shape[0]
-  
-    def __getitem__(self, index):
-        frames = torch.tensor(self.frames[index]).float()
-        mean_ecg = frames.mean(dim = 0, keepdim=True)
-        d_ecg = frames.std(dim = 0, keepdim=True)
-        frames = (frames - mean_ecg)/(d_ecg + 0.00001)
-        if self.training_type == 'unsupervised':
-            X = frames.reshape(1, frames.shape[0], frames.shape[1])
-            Y = frames.reshape(1, frames.shape[0], frames.shape[1])
-            return X, Y
-        elif self.training_type == 'supervised': 
-            X = frames.reshape(1, frames.shape[0], frames.shape[1])
-            Y = torch.tensor(self.labels[index]).long()
-            return  X, Y 
-        else:
-            raise NotImplementedError('no'+ self.training_type)
-
-class EDF78_Dataset(Dataset):
-    # Initialize your data, download, etc.
-    def __init__(self, dataset_path = '/content/drive/MyDrive/Colab_Notebooks/MultiBench-main/data/EEG_EDF78/EEG_Sleep_Processed', 
-        split_type='train', training_type = 'unsupervised',
-        kfold = 5, kfold_id = 0, val_ratio = 0.2, labeled_data = 0.25):
-        super(EDF78_Dataset, self).__init__()
-
-        self.split_type = split_type
-        self.training_type = training_type
-        # load files
-        self.split_type = split_type
-        np_dataset = load_folds_data(np_data_path = dataset_path, n_folds = kfold)
-        if split_type == 'train' or split_type == 'val':
-            np_dataset = np_dataset[kfold_id][0]
-        elif split_type == 'test':
-            np_dataset = np_dataset[kfold_id][1]
-        else:
-            raise NotImplementedError('no'+ split_type) 
-
-        X_train = np.load(np_dataset[0])["x"]
-        y_train = np.load(np_dataset[0])["y"]
-        s_id = np.ones(y_train.shape, dtype=int)*int(np_dataset[0][-10:-7])
-        X_train = (X_train - X_train.mean())/(X_train.std() + 0.000001)
-
-        for np_file in np_dataset[1:]:
-            X_temp = np.load(np_file)["x"]
-            X_temp = (X_temp - X_temp.mean())/(X_temp.std() + 0.000001)
-            X_train = np.vstack((X_train, X_temp))
-            y_temp = np.load(np_file)["y"]
-            y_train = np.append(y_train, y_temp)
-            s_id = np.append(s_id, np.ones(y_temp.shape, dtype=int)*int(np_file[-10:-7]))
-            
-        self.data_len = X_train.shape[0]
-        self.x_data = torch.from_numpy(X_train)
-        self.y_data = torch.from_numpy(y_train).long()
-        self.s_id = torch.from_numpy(s_id).long()
-
-        if split_type == 'train':
-            self.x_data = self.x_data[ : int(self.data_len * (1 - val_ratio)) if self.training_type == 'unsupervised' else int(self.data_len * (1 - val_ratio) * labeled_data)]
-            self.y_data = self.y_data[ : int(self.data_len * (1 - val_ratio)) if self.training_type == 'unsupervised' else int(self.data_len * (1 - val_ratio) * labeled_data)]
-            self.s_id = self.s_id[ : int(self.data_len * (1 - val_ratio))]
-        if split_type == 'val':
-            self.x_data = self.x_data[int(self.data_len * (1 - val_ratio)):]
-            self.y_data = self.y_data[int(self.data_len * (1 - val_ratio)):]
-            self.s_id = self.s_id[int(self.data_len * (1 - val_ratio)):]
-
-        self.data_len = self.x_data.shape[0]
-        print(self.x_data.shape, self.s_id.shape, self.y_data.shape)
-
-    def __getitem__(self, index):
-        frames = self.x_data[index]
-        if self.training_type == 'unsupervised':
-            return frames.unsqueeze(0), self.s_id[index]
-        elif self.training_type == 'supervised': 
-            return frames.unsqueeze(0), self.y_data[index]
-        else:
-            raise NotImplementedError('no'+ self.training_type)
-
-    def __len__(self):
-        return self.data_len
-
 class EEG109_Dataset(Dataset):
     # Initialize your data, download, etc.
     """
@@ -140,6 +34,8 @@ class EEG109_Dataset(Dataset):
         self.training_type = args.training_type
         # load files
         self.split_type = split_type
+        x_c, y_c = torch.meshgrid(torch.arange(-1, args.final_dim), torch.arange(-1, args.final_dim))
+        self.map_indexes = torch.stack([x_c.triu(diagonal = 1), y_c.triu(diagonal = 1)]).permute(1, 2, 0)
         data = np.load(args.dataset_path, allow_pickle = True).item()
         random.seed(args.seed)
         subject_names = list([i for i in data.keys() if i not in [43, 88, 89, 92, 100, 104]])
@@ -149,6 +45,7 @@ class EEG109_Dataset(Dataset):
         self.labels = []
         self.ids = []
         self.test_labels = []
+        self.reorder_index = []
         label_flag = []
         if split_type == 'train':
             subjects = subject_names[:int(l * args.train_ratio_all)]
@@ -166,87 +63,97 @@ class EEG109_Dataset(Dataset):
 
         print(subjects)
         print(label_flag)
+        length_flag = 0
         for i in range(len(subjects)):
-          s = subjects[i]
-          subject_signal = []
-          for l in range(len(data[s])):
-              data_temp = data[s][l][0][:646]
-              if data[s][l][1] < 1:
-                  continue
-              if data_temp.shape[0] < 646:
-                  subject_signal.append(torch.from_numpy(np.pad(data_temp, ((0, 646 - data_temp.shape[0]), (0, 0)), 'constant', constant_values=0)))
-              else:
-                  subject_signal.append(torch.from_numpy(data_temp))
-              if label_flag[i] == 0:
-                  self.labels.append(-1)
-                  self.test_labels.append(data[s][l][1])
-              else:
-                  self.labels.append(data[s][l][1])
-                  self.test_labels.append(data[s][l][1])
-              self.ids.append(s)
-          subject_signal = torch.stack(subject_signal)
-          mean = subject_signal.mean(dim = [1, 2], keepdim = True)
-          std = subject_signal.std(dim = [1, 2], keepdim = True)
-          subject_signal = (subject_signal - mean)/std
-          self.eeg_signal.append(subject_signal)
+            #get data from each subejct
+            s = subjects[i]
+            subject_signal = []
+            labels = []
+            test_labels = []
+            ids = []
+            for l in range(len(data[s])):
+                data_temp = data[s][l][0][:646]
+                if data[s][l][1] < 1:
+                    continue
+                if data_temp.shape[0] < 646:
+                    subject_signal.append(torch.from_numpy(np.pad(data_temp, ((0, 646 - data_temp.shape[0]), (0, 0)), 'constant', constant_values=0)))
+                else:
+                    subject_signal.append(torch.from_numpy(data_temp))
+                if label_flag[i] == 0:
+                    labels.append(-1)
+                    test_labels.append(data[s][l][1])
+                else:
+                    labels.append(data[s][l][1])
+                    test_labels.append(data[s][l][1])
+                ids.append(s)
+            subject_signal = torch.stack(subject_signal)
+            mean = subject_signal.mean(dim = [1, 2], keepdim = True)
+            std = subject_signal.std(dim = [1, 2], keepdim = True)
+            subject_signal = (subject_signal - mean)/std
+            labels = torch.tensor(labels) - 1
+            ids = torch.tensor(ids)
+            test_labels = torch.tensor(test_labels) - 1
 
-        print('Label Counter: ', dict(Counter(self.labels)))
-        self.eeg_signal = torch.cat(self.eeg_signal).float()
-        print(self.eeg_signal.shape)
-        self.labels = torch.tensor(self.labels).long()
-        self.ids = torch.tensor(self.ids).long()
-        self.test_labels = torch.tensor(self.test_labels).long()
-        """if split_type == 'train' or split_type == 'val':
             g = torch.Generator()
             g.manual_seed(args.seed)
-            indexes = torch.randperm(self.labels.shape[0], generator = g)
-            indexes_l = len(indexes)
-            if split_type == 'train':
-                l_train = int(indexes_l * (1 - args.val_ratio))
-                self.labels = self.labels[indexes[:l_train]]
-                self.eeg_signal = self.eeg_signal[indexes[:l_train]]
-                self.ids = self.ids[indexes[:l_train]]
-                l = int(len(self.labels) * args.labeled_data)
-                self.labels = self.labels[ : l]
-                self.eeg_signal = self.eeg_signal[ : l]
-                self.ids = self.ids[ : l]
-            elif split_type == 'val':
-                l_val = int(indexes_l * (1 - args.val_ratio))
-                self.labels = self.labels[indexes[l_val : ]]
-                self.eeg_signal = self.eeg_signal[indexes[l_val : ]]
-                self.ids = self.ids[indexes[l_val : ]]"""
-
-        if split_type == 'train' or split_type == 'val':
-            g = torch.Generator()
-            g.manual_seed(args.seed)
-            indexes = torch.randperm(self.labels.shape[0], generator = g)
+            indexes = torch.randperm(subject_signal.shape[0], generator = g)
             indexes_l = len(indexes)
             if split_type == 'train':
                 l_all = int(indexes_l * args.labeled_data_all)
-                self.labels = self.labels[indexes[:l_all]]
-                self.eeg_signal = self.eeg_signal[indexes[:l_all]]
-                self.ids = self.ids[indexes[:l_all]]
-                self.test_labels = self.test_labels[indexes[:l_all]]
+                labels = labels[indexes[:l_all]]
+                test_labels = test_labels[indexes[:l_all]]
+                subject_signal = subject_signal[indexes[:l_all]]
+                ids = ids[indexes[:l_all]]
                 #l_all -l data will be used but without an label
                 l = int(indexes_l * args.labeled_data)
-                self.labels[l:l_all] = -1
-            else:
-                self.labels = self.labels[indexes]
-                self.eeg_signal = self.eeg_signal[indexes]
-                self.ids = self.ids[indexes]
-            self.true_labels = self.labels[indexes]
-        print(self.eeg_signal.shape, self.labels.shape)
+                labels[l:l_all] = -1
+            
+            l_x, l_y = torch.meshgrid(labels, labels)
+            i_x, i_y = torch.meshgrid(torch.arange(length_flag, length_flag + labels.shape[0]), torch.arange(length_flag, length_flag + labels.shape[0]))
+            reorder_index = torch.stack((i_x, i_y)).permute(1, 2, 0)[i_x != i_y].reshape(-1, 2)
+            self.reorder_index.append(reorder_index)
+            """B, S, H = subject_signal.shape
+            subject_signal = subject_signal.reshape(B, 1, S * H).repeat(1, B, 1)
+            subject_signal = torch.stack((subject_signal, subject_signal.transpose(0, 1)))
+            subject_signal = subject_signal.permute(1, 2, 0, 3)[i_x != i_y]
+            subject_signal = subject_signal.reshape(subject_signal.shape[0], 2, S, H)"""
+            labels = torch.stack((l_x, l_y)).permute(1, 2, 0)
+            l_metrix_or = torch.logical_or(l_x == -1, l_y == -1)
+            binary_metrix = (l_x == l_y) * (~l_metrix_or)
+            labels[binary_metrix] = 0
+            unique_pair, labels = torch.unique(torch.cat([torch.tensor([[-1, -1]]), self.map_indexes.reshape(-1, 2), labels[i_x != i_y].sort()[0]]), dim = 0, return_inverse = True)
+            #print(unique_pair.shape)
+            labels = labels[(args.final_dim + 1) * (args.final_dim + 1) + 1:]
+            self.eeg_signal.append(subject_signal)
+            self.labels.append(labels)
+            ids = [s] * labels.shape[0]
+            self.ids.extend(ids)
+            test_labels = torch.stack(torch.meshgrid(test_labels, test_labels)).permute(1, 2, 0)[i_x != i_y]
+            self.test_labels.append(test_labels)
+            length_flag += subject_signal.shape[0]
+            #print(subject_signal.shape, labels.shape, len(ids), test_labels.shape)
+
+        self.eeg_signal = torch.cat(self.eeg_signal).float()
+        print(self.eeg_signal.shape)
+        self.reorder_index = torch.cat(self.reorder_index)
+        self.labels = torch.cat(self.labels).long()
+        self.ids = torch.tensor(self.ids).long()
+        self.test_labels = torch.cat(self.test_labels).long()
+        print('Label Counter: ', dict(Counter(self.labels.numpy())))
+                   
+        print(self.eeg_signal.shape, self.reorder_index.shape, self.ids.shape, self.labels.shape)
         
     def __len__(self):
         return len(self.labels)
   
     def __getitem__(self, index):
         if self.training_type == 'unsupervised':
-            X = self.eeg_signal[index].unsqueeze(0)
-            Y = [self.labels[index] - 1, self.ids[index], self.true_labels[index] - 1]#[self.labels[index], self.ids[index]]
+            X = torch.stack((self.eeg_signal[self.reorder_index[index, 0]].unsqueeze(0), 
+                            self.eeg_signal[self.reorder_index[index, 1]].unsqueeze(0)))
+            Y = [self.labels[index], self.ids[index], self.test_labels[index]]
         elif self.training_type == 'supervised':
             X = self.eeg_signal[index].unsqueeze(0)
-            Y = self.labels[index] - 1
+            Y = self.labels[index]
         else:
             raise NotImplementedError('no'+ self.training_type)
         return X, Y 
@@ -422,14 +329,5 @@ class EEG2a_Dataset(Dataset):
         return X, Y 
 
 
-    
-"""Test"""
-import matplotlib.pyplot as plt
-if __name__ == "__main__":
-    d = EMGDB7_Dataset(split_type = 'train')
-    plt.figure(figsize = (40, 10))
-    plt.plot(d.__getitem__(0)[0][0, :, 0].numpy())
-    plt.savefig('test.jpg')
-    d.__getitem__(10)
-    d.__getitem__(1000)
+
 

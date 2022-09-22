@@ -52,21 +52,32 @@ def train(model: nn.Module, device, train_loader, scheduler, method, optimizer, 
     for batch, (batch_X, batch_Y) in enumerate(train_loader):
         data = batch_X.to(device)
         if method != 'MAE':
-            data = data.squeeze(1)
-            data1 = []
-            data2 = []
-            for d in data:
-                #data1.append(stretch_spec(d, device, 1.1))
-                #data2.append(stretch_spec(d, device, 1.1))
-                #data1.append(mask_freq_spec(d, device, 0.2))
-                #data2.append(mask_freq_spec(d, device, 0.2))
-                #print(mask_freq_spec(d, device, 0.2).shape)
-                #data1.append(gaussian_noise(mask_freq_spec(d, device, 0.2), 0.5))
-                #data2.append(gaussian_noise(mask_freq_spec(d, device, 0.2), 0.5))
-                data1.append(gaussian_noise(d, 1).transpose(0, 1))
-                data2.append(gaussian_noise(d, 1).transpose(0, 1))
+            if method == "PSL":
+                data = data.transpose(0, 1)
+                data = data.squeeze(2)
+                data1 = []
+                data2 = []
+                for d in data[0]:
+                    data1.append(gaussian_noise(d, 1).transpose(0, 1))
+                for d in data[1]:
+                    data2.append(gaussian_noise(d, 1).transpose(0, 1))
+            else:   
+                data = data.squeeze(1)
+                data1 = []
+                data2 = []
+                for d in data:
+                    #data1.append(stretch_spec(d, device, 1.1))
+                    #data2.append(stretch_spec(d, device, 1.1))
+                    #data1.append(mask_freq_spec(d, device, 0.2))
+                    #data2.append(mask_freq_spec(d, device, 0.2))
+                    #print(mask_freq_spec(d, device, 0.2).shape)
+                    #data1.append(gaussian_noise(mask_freq_spec(d, device, 0.2), 0.5))
+                    #data2.append(gaussian_noise(mask_freq_spec(d, device, 0.2), 0.5))
+                    data1.append(gaussian_noise(d, 1).transpose(0, 1))
+                    data2.append(gaussian_noise(d, 1).transpose(0, 1))
             data1 = torch.stack(data1)
             data2 = torch.stack(data2)
+        
         if method == 'SimCLR':
             data = torch.cat([data1, data2])
             data = data.to(device)
@@ -76,7 +87,10 @@ def train(model: nn.Module, device, train_loader, scheduler, method, optimizer, 
         elif method == 'CLOCS' or method == 'PSL':
             data = torch.cat([data1, data2])
             data = data.to(device)
-            output = model(data, batch_Y)
+            if method == 'PSL':
+                output = model(data, batch_Y[:][:2], batch_Y[:][2])
+            else:
+                output = model(data, batch_Y)
         elif method == 'BYOL' or method == 'WCL':
             if method == 'WCL' and epoch <= 10:
                 adjust_learning_rate(warm_up = 10, optimizer = optimizer, epoch = epoch, base_lr = args.lr, i = batch, iteration_per_epoch = len(train_loader), epochs = args.epochs)
@@ -97,10 +111,13 @@ def train(model: nn.Module, device, train_loader, scheduler, method, optimizer, 
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
         optimizer.step()
-        if method == 'WCL':
+        if method == 'WCL' :
             pseudo_loss += output[3].item()
+        if method == "PSL":
+            pseudo_loss += output[1].item()
         if method == 'BYOL':
             model._update_target_network_parameters()
+        
         total_loss += loss.item()
         batch_num += 1
 
@@ -112,6 +129,7 @@ def train(model: nn.Module, device, train_loader, scheduler, method, optimizer, 
     print(f'| epoch {epoch:3d} | {batch:5d} batches | '
           f'lr {lr:02.2f} | ms/batch {ms_per_batch:5.2f} | '
           f'loss {loss:5.2f}')
+    print(pseudo_loss/batch_num)
     return loss, pseudo_loss/batch_num
 
 def evaluate(model: nn.Module, device, val_loader, method, moco_m = 0.996) -> float:
@@ -122,19 +140,29 @@ def evaluate(model: nn.Module, device, val_loader, method, moco_m = 0.996) -> fl
     with torch.no_grad():
         for batch, (batch_X, batch_Y) in enumerate(val_loader):
             data = batch_X.to(device)
-            if method != 'MAE':
-                data = data.squeeze(1)
-                data1 = []
-                data2 = []
-                for d in data:
-                    #data1.append(stretch_spec(d, device, 1.1))
-                    #data2.append(stretch_spec(d, device, 1.1))
-                    #data1.append(mask_freq_spec(d, device, 0.2))
-                    #data2.append(mask_freq_spec(d, device, 0.2))
-                    #data1.append(gaussian_noise(mask_freq_spec(d, device, 0.2), 0.5))
-                    #data2.append(gaussian_noise(mask_freq_spec(d, device, 0.2), 0.5))
-                    data1.append(gaussian_noise(d, 1).transpose(0, 1))
-                    data2.append(gaussian_noise(d, 1).transpose(0, 1))
+            if method != "MAE":
+                if method == "PSL":
+                    data = data.transpose(0, 1)
+                    data = data.squeeze(2)
+                    data1 = []
+                    data2 = []
+                    for d in data[0]:
+                        data1.append(gaussian_noise(d, 1).transpose(0, 1))
+                    for d in data[1]:
+                        data2.append(gaussian_noise(d, 1).transpose(0, 1))
+                else:   
+                    data = data.squeeze(1)
+                    data1 = []
+                    data2 = []
+                    for d in data:
+                        #data1.append(stretch_spec(d, device, 1.1))
+                        #data2.append(stretch_spec(d, device, 1.1))
+                        #data1.append(mask_freq_spec(d, device, 0.2))
+                        #data2.append(mask_freq_spec(d, device, 0.2))
+                        #data1.append(gaussian_noise(mask_freq_spec(d, device, 0.2), 0.5))
+                        #data2.append(gaussian_noise(mask_freq_spec(d, device, 0.2), 0.5))
+                        data1.append(gaussian_noise(d, 1).transpose(0, 1))
+                        data2.append(gaussian_noise(d, 1).transpose(0, 1))
                 data1 = torch.stack(data1)
                 data2 = torch.stack(data2)
             if method == 'SimCLR':
@@ -146,7 +174,10 @@ def evaluate(model: nn.Module, device, val_loader, method, moco_m = 0.996) -> fl
             elif method == 'CLOCS' or method == 'PSL':
                 data = torch.cat([data1, data2])
                 data = data
-                output = model(data, batch_Y) 
+                if method == 'PSL':
+                    output = model(data, batch_Y[:][:2], batch_Y[:][2])
+                else:
+                    output = model(data, batch_Y) 
             elif method == 'BYOL' or method == 'WCL':
                 batch_view_1 = data1.to(device)
                 batch_view_2 = data2.to(device)
@@ -160,13 +191,20 @@ def evaluate(model: nn.Module, device, val_loader, method, moco_m = 0.996) -> fl
                 output = model(batch_view_1, batch_view_2, moco_m)
             else:
                 raise NotImplementedError('no such ' + method)
-            loss = output[0]
-            total_loss += loss.item()
+            if method == 'PSL':
+                """To be decided"""
+                loss = output[0]
+                total_loss += loss.item()
+            else:
+                loss = output[0]
+                total_loss += loss.item()
             if loss.item() > 0:
                 batch_num += 1
             if method == 'WCL':
                 pseudo_loss += output[3].item()
-    if method == 'WCL':
+            if method == "PSL":
+                pseudo_loss += output[1].item()
+    if method == 'WCL' or method == 'PSL':
         print('validation pseudo label acc: ', pseudo_loss/batch_num)
     return total_loss/batch_num, pseudo_loss/batch_num
 

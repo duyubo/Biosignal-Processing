@@ -26,10 +26,9 @@ from Baselines.MocoV3 import *
 from Baselines.WCL import *
 from Baselines.PSL import *
 from Backbone.Transformer_Backbone import *
-from dataset import *
 from train import *
 from augmentation import *
-
+from dataset_pretrain import *
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Self-supervised Learning For EEG/EMG Signals', add_help=False)
@@ -69,6 +68,7 @@ def get_args_parser():
     parser.add_argument('--final_dim', type=int, default=5, help='Final Dimension')
     parser.add_argument('--temperature', type=float, default=0.1, help='contrastive learning temperature')
     parser.add_argument('--n_views', type=int, default=2, help='number of views')
+    parser.add_argument('--topk', type=int, default=2, help='topk neighbors')
     parser.add_argument('--pretrained', action='store_true', help='Pretrained or Not')
     # Training Parameters
     parser.add_argument('--batch_size', default=128, type=int, help='Batch size')
@@ -80,9 +80,11 @@ def get_args_parser():
     parser.add_argument('--dataset_path', default='/content/drive/MyDrive/Colab_Notebooks/MultiBench-main/data/EEG_Motery_and_imagery/eeg-motor-movementimagery-dataset-1/eeg_109.npy', type=str, help='Dataset Path')
     parser.add_argument('--training_type', default='unsupervised', type=str, help='training Type')
     parser.add_argument('--train_ratio', type=float, default=0.8, help='Training Data Ratio')
+    parser.add_argument('--train_ratio_all', type=float, default=0.8, help='Training Data Ratio All')
     parser.add_argument('--val_ratio', type=float, default=0.2, help='Validation Data Ratio')
     parser.add_argument('--test_ratio', type=float, default=0.2, help='Test Data Ratio')
-    parser.add_argument('--labeled_data', type=float, default=0.1, help='Labeled Data Ratio')
+    parser.add_argument('--labeled_data', type=float, default=1, help='Labeled Data Ratio')
+    parser.add_argument('--labeled_data_all', type=float, default=1, help='Labeled Data Ratio All')
     parser.add_argument('--split_stride', default=100, type=int, help='data split stride')
     return parser
 
