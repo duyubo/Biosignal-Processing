@@ -354,71 +354,86 @@ class EEG2a_Dataset(Dataset):
     def __init__(self, split_type, args):
         super(EEG2a_Dataset, self).__init__()
         random.seed(args.seed)
-        all_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-        eeg_signal = []
-        labels = []
-        ids = []
-        data_class = ['data1', 'data2', 'data3', 'data4']
+        self.split_type = split_type
         self.training_type = args.training_type
-        if split_type == 'train' or split_type == 'val':
-            split_id = all_ids[:int(len(all_ids) * (args.train_ratio))]
-        elif split_type == 'test':
-            split_id = all_ids[int(len(all_ids) * (1 - args.test_ratio)):]
-        file_num_range = ['A0' + str(i) + 'T.mat'for i in split_id]
-        file_num_range.extend(['A0' + str(i) + 'E.mat'for i in split_id])
-        print(file_num_range)
-        for set_num in file_num_range:
-            file_name = set_num
-            subject_id = int(file_name[2])
-            mat = scipy.io.loadmat(os.path.join(args.dataset_path, file_name))
-            for i in range(4): # each file has 4 classes
-                data_num = mat[data_class[i]].shape[2]
-                for j in range(data_num): # each class has a specific number of data
-                    eeg_signal.append(mat[data_class[i]][:,:,j])
-                    labels.append(i)
-                    ids.append(subject_id)
-        self.labels = torch.tensor(np.array(labels)).long()
-        self.eeg_signal = torch.tensor(np.array(eeg_signal)).float()
-        self.ids = torch.tensor(np.array(ids)).long()
-        if split_type == 'train' or split_type == 'val':
+        # load files
+        self.split_type = split_type
+        random.seed(args.seed)
+        subject_names = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+        random.shuffle(subject_names)
+        l = len(subject_names)
+        self.eeg_signal = []
+        self.labels = []
+        self.ids = []
+        self.test_labels = []
+        self.reorder_index = []
+        label_flag = []
+
+        self.data_class = ['data1', 'data2', 'data3', 'data4']
+        if split_type == 'train':
+            subjects = subject_names[:int(l * args.train_ratio_all)]
+            label_flag = [1] * int(l * args.train_ratio)
+            # args.train_ratio_all - args.train_ratio subjects will be used but there is no labels
+            zero_flag = [0] * (int(l * args.train_ratio_all) - int(l * args.train_ratio))
+            label_flag.extend(zero_flag)
+        elif split_type == 'val':
+            subjects = subject_names[int(l * (1 - args.test_ratio - args.val_ratio)): int(l * (1 - args.test_ratio))]
+            label_flag = [1] * (int(l * (1 - args.test_ratio)) - int(l * (1 - args.test_ratio - args.val_ratio)))
+        else:
+            subjects = subject_names[int(l * (1 - args.test_ratio)): ]
+            label_flag = [1] * (l - int(l * (1 - args.test_ratio)))
+        
+        print(subjects)
+        print(label_flag)
+        for i in range(len(subjects)):
+            s = subjects[i]
+            subject_signal = []
+            labels = []
+            matT = scipy.io.loadmat(os.path.join(args.dataset_path, 'A0' + str(s) + 'T.mat'))
+            matE = scipy.io.loadmat(os.path.join(args.dataset_path, 'A0' + str(s) + 'E.mat'))
+            for j in range(4): # each file has 4 classes
+                subject_signal.append(torch.tensor(matT[self.data_class[j]]).permute(2, 0, 1))
+                subject_signal.append(torch.tensor(matE[self.data_class[j]]).permute(2, 0, 1))
+                total_l = (matT[self.data_class[j]].shape[2] + matE[self.data_class[j]].shape[2])
+                labels.extend([j] * total_l)
+
+            subject_signal = torch.cat(subject_signal)
+            mean = subject_signal.mean(dim = [0, 1], keepdim = True)
+            std = subject_signal.std(dim = [0, 1], keepdim = True)
+            subject_signal = (subject_signal - mean)/std
+            labels = torch.tensor(labels)
+            print(subject_signal.shape, labels.shape)
             g = torch.Generator()
             g.manual_seed(args.seed)
-            indexes = torch.randperm(self.labels.shape[0], generator = g)
+            indexes = torch.randperm(subject_signal.shape[0], generator = g)
             indexes_l = len(indexes)
-            if split_type == 'train':
-                l_train = int(indexes_l * (1 - args.val_ratio))
-                self.labels = self.labels[indexes[:l_train]]
-                self.eeg_signal = self.eeg_signal[indexes[:l_train]]
-                self.ids = self.ids[indexes[:l_train]]
-                if self.training_type =='supervised':
-                    l = int(len(self.labels) * args.labeled_data)
-                    self.labels = self.labels[ : l]
-                    self.eeg_signal = self.eeg_signal[ : l]
-                    self.ids = self.ids[ : l]
-            elif split_type == 'val':
-                l_val = int(indexes_l * (1 - args.val_ratio))
-                self.labels = self.labels[indexes[l_val : ]]
-                self.eeg_signal = self.eeg_signal[indexes[l_val : ]]
-                self.ids = self.ids[indexes[l_val : ]]
+            if self.split_type == 'train':
+                l_all = int(indexes_l * args.labeled_data_all)
+                labels = labels[indexes[:l_all]]
+                subject_signal = subject_signal[indexes[:l_all]]
+                #l_all -l data will be used but without an label
+                l = int(indexes_l * args.labeled_data)
+                labels[l:l_all] = -1
+            self.eeg_signal.append(subject_signal)
+            self.labels.append(labels)
 
-        mean = self.eeg_signal.mean(dim = [1, 2], keepdim = True)
-        std = self.eeg_signal.std(dim = [1, 2], keepdim = True)
-        self.eeg_signal = (self.eeg_signal - mean)/std
-        print(self.eeg_signal.shape)
+        self.eeg_signal = torch.cat(self.eeg_signal).float()
+        self.labels = torch.cat(self.labels).long()
+        print(self.eeg_signal.shape, self.labels.shape)
+        print('Label Counter: ', dict(Counter(self.labels.numpy())))
+        g = torch.Generator()
+        g.manual_seed(args.seed)
+        indexes = torch.randperm(self.labels.shape[0], generator = g)
+        self.labels = self.labels[indexes]
+        self.eeg_signal = self.eeg_signal[indexes]
+        
 
     def __len__(self):
         return len(self.labels)
   
     def __getitem__(self, index):
-        if self.training_type == 'unsupervised':
-            X = self.eeg_signal[index].unsqueeze(0)
-            """To be deleted"""
-            Y = [self.labels[index],self.ids[index]]
-        elif self.training_type == 'supervised':
-            X = self.eeg_signal[index].unsqueeze(0)
-            Y = self.labels[index] - 1
-        else:
-            raise NotImplementedError('no'+ self.training_type)
+        X = self.eeg_signal[index].unsqueeze(0)
+        Y = self.labels[index]
         return X, Y 
 
 

@@ -210,32 +210,46 @@ class PSL(nn.Module):
         self.backbone = backbone
         self.projection = MLPHead(in_channels = args.out_dim,  mlp_hidden_size = args.mlp_hidden_size, projection_size = args.projection_size)
         self.diff =  nn.MultiheadAttention(args.projection_size, 16, dropout=0.1)
-        self.header = nn.Sequential(  nn.Linear(args.projection_size, args.projection_size),
+        self.header = nn.Sequential(  nn.Linear(args.projection_size * 2, args.projection_size),
                                       nn.ReLU(),
-                                      nn.Linear(args.projection_size, 12), #args.final_dim * (args.final_dim -1) // 2 + 1
+                                      nn.Linear(args.projection_size, args.final_dim * (args.final_dim -1) // 2 + 1), #
                                       )
-        x_c, y_c = torch.meshgrid(torch.arange(args.final_dim), torch.arange(args.final_dim))
-        self.map_indexes = torch.stack([x_c.triu(diagonal = 1), y_c.triu(diagonal = 1)]).permute(1, 2, 0).cuda()
+        
         #self.average = torch.ones((args.projection_size, args.final_dim * (args.final_dim -1) // 2 + 1))
-        self.final_dim = args.final_dim
+        self.final_dim = args.final_dim * (args.final_dim -1) // 2 + 1
         self.top_number = args.topk
         self.t = args.temperature
     def info_nce_loss(self, features, labels, true_labels):
         #labels[0]: label, labels[1]: subject id
         batch_size = features.shape[0] // 2
-        features = features.permute(0, 2, 1)
-        diff_metrix, _ = self.diff(query = features[:batch_size], key = features[batch_size:], value = features[batch_size:], need_weights=False)
-        diff_metrix = self.backbone.final(diff_metrix.transpose(1, 2))
-        diff_metrix = diff_metrix.squeeze(-1)
+        diff_metrix1, _ = self.diff(query = features[:batch_size], key = features[batch_size:], value = features[batch_size:], need_weights=False)
+        diff_metrix2, _ = self.diff(query = features[batch_size:], key = features[:batch_size], value = features[:batch_size], need_weights=False)
+        
+        diff_metrix1 = self.backbone.final(diff_metrix1.transpose(1, 2))
+        diff_metrix1 = diff_metrix1.squeeze(-1)
+
+        diff_metrix2 = self.backbone.final(diff_metrix2.transpose(1, 2))
+        diff_metrix2 = diff_metrix2.squeeze(-1)
+
+        diff_metrix = torch.cat([diff_metrix1, diff_metrix2], dim = -1)
         final_metrix = self.header(diff_metrix)
-        criterion = torch.nn.CrossEntropyLoss().cuda()
+        weights = []
+        for i in range(self.final_dim):
+            count = (labels[0] == i).sum().item()
+            if count > 0:
+                weights.append(1/count)
+            else:
+                weights.append(0)
+        criterion = torch.nn.CrossEntropyLoss(weight = torch.tensor(weights)).cuda()
         loss = criterion(final_metrix, labels[0].cuda())
-        return loss, torch.tensor([0]).cuda()
+        accuracy = (final_metrix.max(dim = 1)[1] == labels[0].cuda()).sum()/labels[0].cuda().shape[0]
+        return loss, accuracy
        
 
     def forward(self, x, labels, true_labels = None):
         features = self.backbone.backbone(x)
-        #features = self.projection(features.squeeze(-1))
+        features = features.permute(0, 2, 1)
+        #features = self.projection(features)
         loss, pseudo_loss = self.info_nce_loss(features, labels, true_labels)
         
         return loss, pseudo_loss

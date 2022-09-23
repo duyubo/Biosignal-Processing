@@ -193,13 +193,12 @@ def evaluate(model: nn.Module, device, val_loader, method, moco_m = 0.996) -> fl
                 raise NotImplementedError('no such ' + method)
             if method == 'PSL':
                 """To be decided"""
-                loss = output[0]
+                loss = -output[1]
                 total_loss += loss.item()
             else:
                 loss = output[0]
                 total_loss += loss.item()
-            if loss.item() > 0:
-                batch_num += 1
+            batch_num += 1
             if method == 'WCL':
                 pseudo_loss += output[3].item()
             if method == "PSL":

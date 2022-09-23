@@ -118,7 +118,7 @@ def main_unsupervised(args):
 
     train_loader = DataLoader(train_data, batch_size = args.batch_size, shuffle = True)
     if args.method == 'PSL':
-        val_loader = DataLoader(val_data, batch_size = 128, shuffle = True)
+        val_loader = DataLoader(val_data, batch_size = 2048, shuffle = True)
     else:
         val_loader = DataLoader(val_data, batch_size = args.batch_size, shuffle = True)
     backbone = models[args.backbone](args = args).to(device)
