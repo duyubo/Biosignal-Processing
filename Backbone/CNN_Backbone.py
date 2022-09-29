@@ -21,7 +21,7 @@ class CNNModel(nn.Module):
         seq_l = torch.floor((torch.floor(torch.tensor((seq_l - args.first_kernel) / args.first_stride) + 1) - 2)/2 + 1).item()
         for i in range(2):
           seq_l = torch.floor((torch.floor(torch.tensor((seq_l - k) / s) + 1) - 2)/2 + 1).item()
-
+        print(seq_l)
         self.backbone = nn.Sequential(
             nn.Conv1d(args.input_dim,args.c2,args.first_kernel,args.first_stride),
             nn.BatchNorm1d(args.c2),

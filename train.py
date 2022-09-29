@@ -53,14 +53,14 @@ def train(model: nn.Module, device, train_loader, scheduler, method, optimizer, 
         data = batch_X.to(device)
         if method != 'MAE':
             if method == "PSL":
-                data = data.transpose(0, 1)
-                data = data.squeeze(2)
-                data1 = []
-                data2 = []
-                for d in data[0]:
-                    data1.append(gaussian_noise(d, 1).transpose(0, 1))
-                for d in data[1]:
-                    data2.append(gaussian_noise(d, 1).transpose(0, 1))
+                    data = data.transpose(0, 1)
+                    data = data.squeeze(2)
+                    data1 = []
+                    data2 = []
+                    for d in data[0]:
+                        data1.append(gaussian_noise(d, 1).transpose(0, 1))
+                    for d in data[1]:
+                        data2.append(gaussian_noise(d, 1).transpose(0, 1))
             else:   
                 data = data.squeeze(1)
                 data1 = []
@@ -88,7 +88,7 @@ def train(model: nn.Module, device, train_loader, scheduler, method, optimizer, 
             data = torch.cat([data1, data2])
             data = data.to(device)
             if method == 'PSL':
-                output = model(data, batch_Y[:][:2], batch_Y[:][2])
+                output = model(data, batch_Y)
             else:
                 output = model(data, batch_Y)
         elif method == 'BYOL' or method == 'WCL':
@@ -108,18 +108,19 @@ def train(model: nn.Module, device, train_loader, scheduler, method, optimizer, 
             raise NotImplementedError('no such ' + method)
         loss = output[0]
         optimizer.zero_grad()
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
-        optimizer.step()
-        if method == 'WCL' :
-            pseudo_loss += output[3].item()
-        if method == "PSL":
-            pseudo_loss += output[1].item()
-        if method == 'BYOL':
-            model._update_target_network_parameters()
-        
-        total_loss += loss.item()
-        batch_num += 1
+        if loss > 0:
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+            optimizer.step()
+            if method == 'WCL' :
+                pseudo_loss += output[3].item()
+            if method == "PSL":
+                pseudo_loss += output[1].item()
+            if method == 'BYOL':
+                model._update_target_network_parameters()
+            
+            total_loss += loss.item()
+            batch_num += 1
 
     lr = scheduler.get_last_lr()[0]
     ms_per_batch = (time.time() - start_time) * 1000 / batch_num
@@ -147,9 +148,9 @@ def evaluate(model: nn.Module, device, val_loader, method, moco_m = 0.996) -> fl
                     data1 = []
                     data2 = []
                     for d in data[0]:
-                        data1.append(gaussian_noise(d, 1).transpose(0, 1))
+                        data1.append(d.transpose(0, 1))
                     for d in data[1]:
-                        data2.append(gaussian_noise(d, 1).transpose(0, 1))
+                        data2.append(d.transpose(0, 1))
                 else:   
                     data = data.squeeze(1)
                     data1 = []
@@ -175,7 +176,7 @@ def evaluate(model: nn.Module, device, val_loader, method, moco_m = 0.996) -> fl
                 data = torch.cat([data1, data2])
                 data = data
                 if method == 'PSL':
-                    output = model(data, batch_Y[:][:2], batch_Y[:][2])
+                    output = model(data, batch_Y)
                 else:
                     output = model(data, batch_Y) 
             elif method == 'BYOL' or method == 'WCL':

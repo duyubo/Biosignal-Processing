@@ -11,6 +11,12 @@ from scipy.signal import butter, lfilter
 import os
 import random
 from collections import Counter
+import moabb
+from moabb import datasets
+from moabb.paradigms import MotorImagery
+from moabb.paradigms import LeftRightImagery
+from moabb.paradigms import FilterBankMotorImagery
+import mne 
 
 class Base_Dataset(Dataset):
     def __init__(self, args, split_type):
@@ -26,8 +32,10 @@ class Base_Dataset(Dataset):
         self.split_type = split_type
         x_c, y_c = torch.meshgrid(torch.arange(args.final_dim), torch.arange(args.final_dim))
         self.map_indexes = torch.stack([x_c.triu(diagonal = 1), y_c.triu(diagonal = 1)]).permute(1, 2, 0)
-
-    def reorganize_data(self, subjects, label_flag, args, data = None):
+        self.data_ratio_train = args.data_ratio_train
+        self.data_ratio_val = args.data_ratio_val
+        #print(self.map_indexes)
+    def reorganize_data(self, subjects, label_flag, args, data = None):    
         length_flag = 0
         for i in range(len(subjects)):
             s = subjects[i]
@@ -55,6 +63,7 @@ class Base_Dataset(Dataset):
             
             l_x, l_y = torch.meshgrid(labels, labels)
             i_x, i_y = torch.meshgrid(torch.arange(length_flag, length_flag + labels.shape[0]), torch.arange(length_flag, length_flag + labels.shape[0]))
+            #print(length_flag, labels.shape[0])
             reorder_index = torch.stack((i_x, i_y)).permute(1, 2, 0)[i_x != i_y].reshape(-1, 2)
             self.reorder_index.append(reorder_index)
             labels = torch.stack((l_x, l_y)).permute(1, 2, 0)
@@ -62,8 +71,8 @@ class Base_Dataset(Dataset):
             binary_metrix = (l_x == l_y) * (~l_metrix_or)
             labels[binary_metrix] = 0
             labels[l_metrix_or] = -1
+            #
             unique_pair, labels = torch.unique(torch.cat([torch.tensor([[-1, -1]]), self.map_indexes.reshape(-1, 2), labels[i_x != i_y].sort()[0]]), dim = 0, return_inverse = True)
-            #print(unique_pair.shape)
             labels = labels[args.final_dim * args.final_dim + 1:]
             labels = labels - 1 
             self.eeg_signal.append(subject_signal)
@@ -99,22 +108,21 @@ class Base_Dataset(Dataset):
 
     def __len__(self):
         if self.split_type == "train":
-            return int(len(self.labels) * 1)
+            return int(len(self.labels) * self.data_ratio_train)
         else:
-            return int(len(self.labels))
+            return int(len(self.labels) * self.data_ratio_train)
   
     def __getitem__(self, index):
         if self.training_type == 'unsupervised':
             X = torch.stack((self.eeg_signal[self.reorder_index[index, 0]].unsqueeze(0), 
                             self.eeg_signal[self.reorder_index[index, 1]].unsqueeze(0)))
-            Y = [self.labels[index], self.ids[index], self.test_labels[index]]
+            Y = [self.labels[index], self.ids[index]]
         elif self.training_type == 'supervised':
             X = self.eeg_signal[index].unsqueeze(0)
             Y = self.labels[index]
         else:
             raise NotImplementedError('no'+ self.training_type)
         return X, Y
-
 
 class EEG109_Dataset(Base_Dataset):
     # Initialize your data, download, etc.
@@ -183,6 +191,256 @@ class EEG109_Dataset(Base_Dataset):
         subject_signal = torch.stack(subject_signal)
         return subject_signal, labels, test_labels, ids
 
+class Cho2017_Dataset(Base_Dataset):
+    # Initialize your data, download, etc.
+    def __init__(self, args, split_type):
+        super(Cho2017_Dataset, self).__init__(args, split_type)
+        self.paradigm = LeftRightImagery()
+        data = datasets.Cho2017()
+        mne.set_config('MNE_DATASETS_CHO2017_PATH', args.dataset_path)
+        mne.set_config('MNE_DATASETS_GIGADB_PATH', args.dataset_path)
+        random.seed(args.seed)
+        subject_names = list([i for i in range(1, 53) if i not in [32, 20, 33, 46, 49]])
+        random.shuffle(subject_names)
+        l = len(subject_names)
+        self.dataset_path = args.dataset_path
+        self.label_map = {'left_hand': 0, 'right_hand': 1}
+        self.eeg_signal = []
+        self.labels = []
+        self.ids = []
+        self.test_labels = []
+        self.reorder_index = []
+        label_flag = []
+        if split_type == 'train':
+            subjects = subject_names[:int(l * args.train_ratio_all)]
+            label_flag = [1] * int(l * args.train_ratio)
+            # args.train_ratio_all - args.train_ratio subjects will be used but there is no labels
+            zero_flag = [0] * (int(l * args.train_ratio_all) - int(l * args.train_ratio))
+            label_flag.extend(zero_flag)
+        elif split_type == 'val':
+            subjects = subject_names[int(l * (1 - args.test_ratio - args.val_ratio)): int(l * (1 - args.test_ratio))]
+            label_flag = [1] * (int(l * (1 - args.test_ratio)) - int(l * (1 - args.test_ratio - args.val_ratio)))
+        else:
+            subjects = subject_names[int(l * (1 - args.test_ratio)): ]
+            label_flag = [1] * (l - int(l * (1 - args.test_ratio)))
+
+        print(subjects)
+        print(label_flag)
+        
+        self.reorganize_data(subjects = subjects, label_flag = label_flag, args = args, data = data)
+
+    def load_data(self, label_flag, args, s, i, data):
+        subject_signal = []
+        labels = []
+        test_labels = []
+        ids = []
+        X, labels_o, meta = self.paradigm.get_data(dataset=data, subjects=[s])
+        for l in range(X.shape[0]):
+            subject_signal.append(torch.from_numpy(X[l]))
+            if label_flag[i] == 0:
+                labels.append(-1)
+                test_labels.append(self.label_map[labels_o[l]])
+            else:
+                labels.append(self.label_map[labels_o[l]])
+                test_labels.append(self.label_map[labels_o[l]])
+            ids.append(s) 
+        subject_signal = torch.stack(subject_signal)
+        subject_signal = subject_signal.transpose(1, 2)
+        return subject_signal, labels, test_labels, ids
+
+class HaLT12_Dataset(Base_Dataset):
+    # Initialize your data, download, etc.
+    def __init__(self, args, split_type):
+        super(HaLT12_Dataset, self).__init__(args, split_type)
+        data = np.load(args.dataset_path, allow_pickle = True).item()
+        random.seed(args.seed)
+        subject_names = list(range(1, 13))
+        random.shuffle(subject_names)
+        l = len(subject_names)
+        self.label_map = {1: 0, 2: 1, 4: 2, 5: 3, 6: 4 ,
+                          0: -99, 3: -99, 91: -99, 92: -99, 99: -99}
+        self.eeg_signal = []
+        self.labels = []
+        self.ids = []
+        self.test_labels = []
+        self.reorder_index = []
+        label_flag = []
+        if split_type == 'train':
+            subjects = subject_names[:int(l * args.train_ratio_all)]
+            label_flag = [1] * int(l * args.train_ratio)
+            # args.train_ratio_all - args.train_ratio subjects will be used but there is no labels
+            zero_flag = [0] * (int(l * args.train_ratio_all) - int(l * args.train_ratio))
+            label_flag.extend(zero_flag)
+        elif split_type == 'val':
+            #subjects = subject_names[:int(l * args.train_ratio)]
+            subjects = subject_names[int(l * (1 - args.test_ratio - args.val_ratio)): int(l * (1 - args.test_ratio))]
+            label_flag = [1] * (int(l * (1 - args.test_ratio)) - int(l * (1 - args.test_ratio - args.val_ratio)))
+        else:
+            subjects = subject_names[int(l * (1 - args.test_ratio)): ]
+            label_flag = [1] * (l - int(l * (1 - args.test_ratio)))
+
+        print(subjects)
+        print(label_flag)
+        
+        self.reorganize_data(subjects = subjects, label_flag = label_flag, args = args, data = data)
+
+    def load_data(self, label_flag, args, s, i, data):
+        subject_signal = []
+        labels = []
+        test_labels = []
+        ids = []
+        for l in range(len(data[s])):
+            label = data[s][l][1][0]
+            if self.label_map[label] >= 0:
+                subject_signal.append(data[s][l][0][:200])
+                if label_flag[i] == 0:
+                    labels.append(-1)
+                    test_labels.append(self.label_map[label])
+                else:
+                    labels.append(self.label_map[label])
+                    test_labels.append(self.label_map[label])
+                ids.append(s) 
+        subject_signal = torch.stack(subject_signal)
+        return subject_signal, labels, test_labels, ids
+
+class Shin2017_Dataset(Base_Dataset):
+    # Initialize your data, download, etc.
+    def __init__(self, args, split_type):
+        super(Shin2017_Dataset, self).__init__(args, split_type)
+        self.paradigm = MotorImagery()
+        data = datasets.Shin2017A(accept=True)
+        random.seed(args.seed)
+        subject_names = list(range(1, 30))
+        random.shuffle(subject_names)
+        l = len(subject_names)
+        mne.set_config('MNE_DATASETS_BBCIFNIRS_PATH', args.dataset_path)
+        x_c, y_c = torch.meshgrid(torch.arange(args.final_dim), torch.arange(args.final_dim))
+        self.map_indexes = torch.stack([x_c.triu(diagonal = 1), y_c.triu(diagonal = 1)]).permute(1, 2, 0)
+        self.label_map = {'left_hand': 0, 
+                          'right_hand': 1 }
+        self.eeg_signal = []
+        self.labels = []
+        self.ids = []
+        self.test_labels = []
+        self.reorder_index = []
+        label_flag = []
+        if split_type == 'train':
+            subjects = subject_names[:int(l * args.train_ratio_all)]
+            label_flag = [1] * int(l * args.train_ratio)
+            # args.train_ratio_all - args.train_ratio subjects will be used but there is no labels
+            zero_flag = [0] * (int(l * args.train_ratio_all) - int(l * args.train_ratio))
+            label_flag.extend(zero_flag)
+        elif split_type == 'val':
+            #subjects = subject_names[:int(l * args.train_ratio)]
+            subjects = subject_names[int(l * (1 - args.test_ratio - args.val_ratio)): int(l * (1 - args.test_ratio))]
+            label_flag = [1] * (int(l * (1 - args.test_ratio)) - int(l * (1 - args.test_ratio - args.val_ratio)))
+        else:
+            subjects = subject_names[int(l * (1 - args.test_ratio)): ]
+            label_flag = [1] * (l - int(l * (1 - args.test_ratio)))
+
+        print(subjects)
+        print(label_flag)
+        
+        self.reorganize_data(subjects = subjects, label_flag = label_flag, args = args, data = data)
+    
+    def reorganize_data(self, subjects, label_flag, args, data = None):    
+        length_flag = 0
+        for i in range(len(subjects)):
+            s = subjects[i]
+            subject_signal, labels, test_labels, ids, split_ids = self.load_data(label_flag = label_flag, args = args, s = s, i = i, data = data)
+            mean = subject_signal.mean(dim = [0, 1], keepdim = True)
+            std = subject_signal.std(dim = [0, 1], keepdim = True)
+            subject_signal = (subject_signal - mean)/std
+            labels = torch.tensor(labels)
+            ids = torch.tensor(ids)
+            split_ids = torch.tensor(split_ids)
+            test_labels = torch.tensor(test_labels)
+            #print(subject_signal.shape, labels.shape, ids.shape, test_labels.shape, split_ids.shape)
+            g = torch.Generator()
+            g.manual_seed(args.seed)
+            indexes = torch.randperm(subject_signal.shape[0], generator = g)
+            indexes_l = len(indexes)
+            if self.split_type == 'train':
+                l_all = int(indexes_l * args.labeled_data_all)
+                labels = labels[indexes[:l_all]]
+                test_labels = test_labels[indexes[:l_all]]
+                subject_signal = subject_signal[indexes[:l_all]]
+                ids = ids[indexes[:l_all]]
+                split_ids = split_ids[indexes[:l_all]]
+                #l_all -l data will be used but without an label
+                l = int(indexes_l * args.labeled_data)
+                labels[l:l_all] = -1
+            
+            l_x, l_y = torch.meshgrid(labels, labels)
+            s_x, s_y = torch.meshgrid(split_ids, split_ids)
+            i_x, i_y = torch.meshgrid(torch.arange(length_flag, length_flag + labels.shape[0]), torch.arange(length_flag, length_flag + labels.shape[0]))
+            select_mask = (i_x != i_y) * (s_x != s_y)
+            reorder_index = torch.stack((i_x, i_y)).permute(1, 2, 0)[select_mask].reshape(-1, 2)
+            self.reorder_index.append(reorder_index)
+            labels = torch.stack((l_x, l_y)).permute(1, 2, 0)
+            l_metrix_or = torch.logical_or(l_x == -1, l_y == -1)
+            binary_metrix = (l_x == l_y) * (~l_metrix_or)
+            labels[binary_metrix] = 0
+            labels[l_metrix_or] = -1
+            unique_pair, labels = torch.unique(torch.cat([torch.tensor([[-1, -1]]), self.map_indexes.reshape(-1, 2), labels[select_mask].sort()[0]]), dim = 0, return_inverse = True)
+            labels = labels[args.final_dim * args.final_dim + 1:]
+            labels = labels - 1 
+            self.eeg_signal.append(subject_signal)
+            self.labels.append(labels)
+            ids = [s] * labels.shape[0]
+            self.ids.extend(ids)
+            test_labels = torch.stack(torch.meshgrid(test_labels, test_labels)).permute(1, 2, 0)[select_mask]
+            self.test_labels.append(test_labels)
+            length_flag += subject_signal.shape[0]
+            """print("subject_signal.shape", subject_signal.shape, 
+                "reorder_index.shape", reorder_index.shape, 
+                "labels.shape", labels.shape, 
+                "len(ids)", len(ids), 
+                "test_labels.shape", test_labels.shape)"""
+        
+        self.eeg_signal = torch.cat(self.eeg_signal).float()
+        print(self.eeg_signal.shape)
+        self.reorder_index = torch.cat(self.reorder_index)
+        self.labels = torch.cat(self.labels).long()
+        self.ids = torch.tensor(self.ids).long()
+        self.test_labels = torch.cat(self.test_labels).long()
+        print('Label Counter: ', dict(Counter(self.labels.numpy())))
+
+        g = torch.Generator()
+        g.manual_seed(args.seed)
+        indexes = torch.randperm(self.labels.shape[0], generator = g)
+        self.reorder_index = self.reorder_index[indexes]
+        self.labels = self.labels[indexes]
+        self.ids = self.ids[indexes]
+        self.test_labels = self.test_labels[indexes]
+                   
+        print(self.eeg_signal.shape, self.reorder_index.shape, self.ids.shape, self.labels.shape)
+
+    def load_data(self, label_flag, args, s, i, data):
+        subject_signal = []
+        labels = []
+        test_labels = []
+        ids = []
+        X, labels_o, _ = self.paradigm.get_data(dataset=data, subjects=[s])
+        #print(X.shape, len(labels_o))
+        split_ids = []
+        for l in range(X.shape[0]):
+            single_trail = X[l]
+            for j in range(0, 2000, args.seq_length):
+                subject_signal.append(torch.from_numpy(single_trail[:, j : j + args.seq_length]))
+                split_ids.append(l)
+                if label_flag[i] == 0:
+                    labels.append(-1)
+                    test_labels.append(self.label_map[labels_o[l]])
+                else:
+                    labels.append(self.label_map[labels_o[l]])
+                    test_labels.append(self.label_map[labels_o[l]])
+                ids.append(s) 
+
+        subject_signal = torch.stack(subject_signal)
+        subject_signal = subject_signal.transpose(1, 2)
+        return subject_signal, labels, test_labels, ids, split_ids
+
 class EEG2a_Dataset(Base_Dataset):
     def __init__(self, split_type, args):
         super(EEG2a_Dataset, self).__init__(args, split_type)
@@ -236,103 +494,5 @@ class EEG2a_Dataset(Base_Dataset):
         return subject_signal, labels, test_labels, ids
     
 
-class EMGDB7_Dataset(Dataset):
-    def __init__(self, args, split_type):
-        super(EMGDB7_Dataset, self).__init__()
-        self.split_type = split_type
-        self.training_type = args.training_type
-        self.split_type = split_type
-        data = np.load(args.dataset_path, allow_pickle = True).item()
-        random.seed(args.seed)
-        subject_names = list(data.keys())
-        random.shuffle(subject_names)
-        l = len(subject_names)
-        self.emg_signal = []
-        self.labels = []
-        self.ids = []
-        if split_type == 'train':
-            subjects = subject_names[:int(l * (args.train_ratio))]
-        elif split_type == 'val':
-            subjects = subject_names[:int(l * (args.train_ratio))]
-        else:
-            subjects = subject_names[int(l * (1 - args.test_ratio)):]
-        print(subjects)
-
-        b, a = butter(N = 4, Wn = 20, btype='highpass', analog=False, fs=2000, output = 'sos')#
-        for s in subjects:
-          for l in range(len(data[s]['label'])):
-              data_temp = data[s]
-              emgs = data_temp['emg'][l]
-              seq_length = emgs.shape[0]
-              assert seq_length >= args.seq_length
-              split_step = args.split_stride if self.training_type == 'supervised' else args.seq_length
-              for i in range(args.split_stride * 2, seq_length - args.seq_length - args.split_stride, split_step): 
-                  emg_single = lfilter(b, a, emgs[i: i + args.seq_length])
-                  self.emg_signal.append(torch.from_numpy(emg_single))
-                  self.labels.append(data_temp['label'][l])
-                  self.ids.append(s)
-         
-        self.emg_signal = torch.stack(self.emg_signal).float()
-        self.labels = torch.tensor(self.labels).long()
-        self.ids = torch.tensor(self.ids).long()
-
-        """To be deleted"""
-        """"g = torch.Generator()
-        g.manual_seed(0)
-        indexes = torch.randperm(self.labels.shape[0], generator = g)
-        l = self.labels.shape[0]
-        if split_type == 'train':
-            self.labels = self.labels[indexes[:int(l * (1 - args.test_ratio - args.val_ratio))]]
-            self.emg_signal = self.emg_signal[indexes[:int(l * (1 - args.test_ratio - args.val_ratio))]]
-        elif split_type == 'val':
-            self.labels = self.labels[indexes[int(l * (1 - args.test_ratio - args.val_ratio)): int(l * (1 - args.test_ratio))]]
-            self.emg_signal = self.emg_signal[indexes[int(l * (1 - args.test_ratio - args.val_ratio)): int(l * (1 - args.test_ratio))]]
-        else:
-            self.labels = self.labels[indexes[int(l * (1 - args.test_ratio)): ]]
-            self.emg_signal = self.emg_signal[indexes[int(l * (1 - args.test_ratio)): ]]"""
-        """To be deleted"""
-
-        if split_type == 'train' or split_type == 'val':
-            g = torch.Generator()
-            g.manual_seed(args.seed)
-            indexes = torch.randperm(self.labels.shape[0], generator = g)
-            indexes_l = len(indexes)
-            if split_type == 'train':
-                l_train = int(indexes_l * (1 - args.val_ratio))
-                self.labels = self.labels[indexes[:l_train]]
-                self.emg_signal = self.emg_signal[indexes[:l_train]]
-                self.ids = self.ids[indexes[:l_train]]
-                if self.training_type =='supervised':
-                    l = int(len(self.labels) * args.labeled_data)
-                    self.labels = self.labels[ : l]
-                    self.emg_signal = self.emg_signal[ : l]
-                    self.ids = self.ids[ :l]
-            elif split_type == 'val':
-                l_val = int(indexes_l * (1 - args.val_ratio))
-                self.labels = self.labels[indexes[l_val : ]]
-                self.emg_signal = self.emg_signal[indexes[l_val : ]]
-                self.ids = self.ids[indexes[l_val : ]]
-            
-        mean = self.emg_signal.mean(dim = [1, 2], keepdim = True)
-        std = self.emg_signal.std(dim = [1, 2], keepdim = True)
-        self.emg_signal = (self.emg_signal - mean)/std
-        """max_emg = self.emg_signal.amax(dim = (1, 2), keepdim = True)
-        min_emg = self.emg_signal.amin(dim = (1, 2), keepdim = True)
-        self.emg_signal = (self.emg_signal - min_emg)/(max_emg - min_emg)"""
-        print(self.emg_signal.shape, self.ids.shape, self.labels.shape)
-        
-    def __len__(self):
-        return len(self.labels)
-  
-    def __getitem__(self, index):
-        if self.training_type == 'unsupervised':
-            X = self.emg_signal[index].unsqueeze(0)
-            Y = self.ids[index]
-        elif self.training_type == 'supervised':
-            X = self.emg_signal[index].unsqueeze(0)
-            Y = self.labels[index] - 1
-        else:
-            raise NotImplementedError('no'+ self.training_type)
-        return X, Y 
 
 

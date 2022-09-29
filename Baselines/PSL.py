@@ -6,6 +6,7 @@ import numpy as np
 import torchvision.models as models
 from itertools import combinations
 from Backbone.CNN_Backbone import *
+from torch.distributions import Categorical
 
 """
 #PSL version 1
@@ -209,40 +210,87 @@ class PSL(nn.Module):
         self.temperature = args.temperature
         self.backbone = backbone
         self.projection = MLPHead(in_channels = args.out_dim,  mlp_hidden_size = args.mlp_hidden_size, projection_size = args.projection_size)
-        self.diff =  nn.MultiheadAttention(args.projection_size, 16, dropout=0.1)
-        self.header = nn.Sequential(  nn.Linear(args.projection_size * 2, args.projection_size),
+        self.diff =  nn.MultiheadAttention(embed_dim = args.projection_size, 
+                                            num_heads = 4,
+                                            dropout=0.0, 
+                                            bias=True,
+                                            batch_first=True)
+        self.final_dim = args.final_dim * (args.final_dim - 1) // 2 + 1 #args.final_dim * args.final_dim  - 1
+        self.header = nn.Sequential(  nn.Linear(args.projection_size , args.projection_size),
                                       nn.ReLU(),
-                                      nn.Linear(args.projection_size, args.final_dim * (args.final_dim -1) // 2 + 1), #
+                                      nn.Linear(args.projection_size, self.final_dim), #
                                       )
         
-        #self.average = torch.ones((args.projection_size, args.final_dim * (args.final_dim -1) // 2 + 1))
-        self.final_dim = args.final_dim * (args.final_dim -1) // 2 + 1
         self.top_number = args.topk
         self.t = args.temperature
-    def info_nce_loss(self, features, labels, true_labels):
-        #labels[0]: label, labels[1]: subject id
-        batch_size = features.shape[0] // 2
-        diff_metrix1, _ = self.diff(query = features[:batch_size], key = features[batch_size:], value = features[batch_size:], need_weights=False)
-        diff_metrix2, _ = self.diff(query = features[batch_size:], key = features[:batch_size], value = features[:batch_size], need_weights=False)
+        self.la = args.la
+        self.ln1 = torch.nn.LayerNorm(args.projection_size)
+        self.ln2 = torch.nn.LayerNorm(args.projection_size)
+
+    def cal_diff_metrix(self, batch_size, features, mask, labels):
+        features1 = features[:batch_size][mask]
+        features2 = features[batch_size:][mask]
+        valid_label = labels[mask]
+        
+        diff_metrix1, _ = self.diff(query = features1, key = features2, value = features2, need_weights=False)
+        diff_metrix1 = self.ln1(features2) - self.ln2(diff_metrix1)
+        #diff_metrix2, _ = self.diff(query = features2, key = features1, value = features1, need_weights=False)
         
         diff_metrix1 = self.backbone.final(diff_metrix1.transpose(1, 2))
         diff_metrix1 = diff_metrix1.squeeze(-1)
 
-        diff_metrix2 = self.backbone.final(diff_metrix2.transpose(1, 2))
-        diff_metrix2 = diff_metrix2.squeeze(-1)
+        #diff_metrix2 = self.backbone.final(diff_metrix2.transpose(1, 2))
+        #diff_metrix2 = diff_metrix2.squeeze(-1)
 
-        diff_metrix = torch.cat([diff_metrix1, diff_metrix2], dim = -1)
-        final_metrix = self.header(diff_metrix)
+        #diff_metrix = torch.cat([diff_metrix1, diff_metrix2], dim = -1)
+        final_metrix = self.header(diff_metrix1)
+
+        return final_metrix, valid_label
+    def info_nce_loss(self, features, labels, true_labels):
+        #labels[0]: label, labels[1]: subject id
+        valid_mask = labels[0] != -1
+        #print(valid_mask.sum()/labels[0].shape[0])
+        batch_size = features.shape[0] // 2
+        final_metrix, valid_label = self.cal_diff_metrix(batch_size, features, mask = valid_mask, labels = labels[0].cuda())
+        invalid_final_metrix, invalid_label = self.cal_diff_metrix(batch_size, features, mask = ~valid_mask, labels = labels[0].cuda())
+        #print(final_metrix.shape, invalid_final_metrix.shape)
+
+        final_metrix_norm = F.normalize(final_metrix)
+        invalid_final_metrix_norm = F.normalize(invalid_final_metrix)
+        distance_metrix = invalid_final_metrix_norm @ final_metrix_norm.T/self.t
+        #print(distance_metrix.shape)
+        
+        entropy_loss = 0.0
+        loss = torch.tensor([0.0]).cuda()
+        accuracy = 0
+        mean_list = []
+        if (~valid_mask).sum() > 0:
+            for i in range(self.final_dim):
+                i_mask = (valid_label == i)
+                if i_mask.sum() > 0:
+                    i_metrix = distance_metrix[:, i_mask].mean(dim = -1).unsqueeze(-1)
+                    mean_list.append(i_metrix)
+                    i_loss = torch.exp(-Categorical(probs = distance_metrix[:, i_mask].softmax(dim = -1)).entropy()).mean()
+                    entropy_loss += i_loss
+            if entropy_loss != 0:
+                mean_list = torch.cat(mean_list, dim = -1)
+                if mean_list.shape[1] != 0:
+                    mean_loss = Categorical(probs = mean_list.softmax(dim = -1)).entropy().mean()
+                    entropy_loss += mean_loss
+                    
+        
         weights = []
         for i in range(self.final_dim):
-            count = (labels[0] == i).sum().item()
+            count = (valid_label == i).sum().item()
             if count > 0:
                 weights.append(1/count)
             else:
-                weights.append(0)
+                weights.append(0)   
         criterion = torch.nn.CrossEntropyLoss(weight = torch.tensor(weights)).cuda()
-        loss = criterion(final_metrix, labels[0].cuda())
-        accuracy = (final_metrix.max(dim = 1)[1] == labels[0].cuda()).sum()/labels[0].cuda().shape[0]
+        loss = criterion(final_metrix, valid_label)
+        accuracy = (final_metrix.max(dim = 1)[1] == valid_label).sum()/valid_label.shape[0]
+        #print('loss: ', loss, 'entropy loss', entropy_loss)
+        loss += entropy_loss * self.la
         return loss, accuracy
        
 

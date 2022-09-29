@@ -28,7 +28,8 @@ from Baselines.PSL import *
 from Backbone.Transformer_Backbone import *
 from train import *
 from augmentation import *
-from dataset_pretrain import *
+import dataset_pretrain as DP
+import dataset as D
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Self-supervised Learning For EEG/EMG Signals', add_help=False)
@@ -67,6 +68,7 @@ def get_args_parser():
     # Contrastive Learning Parameters
     parser.add_argument('--final_dim', type=int, default=5, help='Final Dimension')
     parser.add_argument('--temperature', type=float, default=0.1, help='contrastive learning temperature')
+    parser.add_argument('--la', type=float, default=0.1, help='PSL unsupervised weight')
     parser.add_argument('--n_views', type=int, default=2, help='number of views')
     parser.add_argument('--topk', type=int, default=2, help='topk neighbors')
     parser.add_argument('--pretrained', action='store_true', help='Pretrained or Not')
@@ -79,6 +81,8 @@ def get_args_parser():
     parser.add_argument('--dataset', default='EEG109', type=str, help='Dataset Name')
     parser.add_argument('--dataset_path', default='/content/drive/MyDrive/Colab_Notebooks/MultiBench-main/data/EEG_Motery_and_imagery/eeg-motor-movementimagery-dataset-1/eeg_109.npy', type=str, help='Dataset Path')
     parser.add_argument('--training_type', default='unsupervised', type=str, help='training Type')
+    parser.add_argument('--data_ratio_train', type=float, default=0.1, help='Pretraining sample rate for training')
+    parser.add_argument('--data_ratio_val', type=float, default=0.1, help='Pretraining sample rate for validation')
     parser.add_argument('--train_ratio', type=float, default=0.8, help='Training Data Ratio')
     parser.add_argument('--train_ratio_all', type=float, default=0.8, help='Training Data Ratio All')
     parser.add_argument('--val_ratio', type=float, default=0.2, help='Validation Data Ratio')
@@ -105,13 +109,15 @@ def main_unsupervised(args):
     }
 
     dataset = {
-      'EEG109': EEG109_Dataset,
-      'EEG2a':EEG2a_Dataset,
-      'EMGDB7': EMGDB7_Dataset,
+      'EEG109': DP.EEG109_Dataset if args.method == 'PSL' else D.EEG109_Dataset,
+      'EEG2a': DP.EEG2a_Dataset if args.method == 'PSL' else D.EEG2a_Dataset,
+      'Cho2017': DP.Cho2017_Dataset if args.method == 'PSL' else D.Cho2017_Dataset,
+      'Shin2017': DP.Shin2017_Dataset if args.method == 'PSL' else D.Shin2017_Dataset,
+      'HaLT12':DP.HaLT12_Dataset if args.method == 'PSL' else D.Shin2017_Dataset,
     }
-
     torch.manual_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+  
     train_data = dataset[args.dataset](split_type='train', args = args)  
     val_data = dataset[args.dataset](split_type='val', args = args)  
     
@@ -144,7 +150,7 @@ def main_unsupervised(args):
         loss_curve.append(loss_eval[1])
         if loss_eval[0] < best_loss:
             torch.save(backbone, args.path + args.dataset + '_' + args.method + '_'+ args.backbone + '_Backbone.pt')
-            torch.save(model, args.path + args.dataset + '_' + args.method + '_'+ args.backbone + '.pt')
+            #torch.save(model, args.path + args.dataset + '_' + args.method + '_'+ args.backbone + '.pt')
             best_loss = loss_eval[0]
             save_num = epoch
         if epoch - save_num > args.patience:

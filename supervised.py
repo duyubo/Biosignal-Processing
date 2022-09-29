@@ -146,8 +146,10 @@ def main_supervised(args):
 
     dataset = {
       'EEG109': EEG109_Dataset,
-      'EEG2a':EEG2a_Dataset,
-      'EMGDB7': EMGDB7_Dataset,
+      'EEG2a': EEG2a_Dataset,
+      'Cho2017': Cho2017_Dataset,
+      'Shin2017': Shin2017_Dataset,
+      'HaLT12': HaLT12_Dataset,
     }
 
     train_data = dataset[args.dataset](split_type = 'train', args = args)  
@@ -202,12 +204,23 @@ if __name__ == "__main__":
     args = args.parse_args()
     results_summary = []
     main_supervised(args)
-    """for labeled_ratio in [1]:# 0.01, 0.1, 0.2, 0.4, 0.6, 0.8,
-        args.labeled_data = labeled_ratio
-        results_summary.append(main_supervised(args))"""
-    """for train_ratio in [ 0.01, 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 0.9]:#
-        args.train_ratio = train_ratio
-        results_summary.append(main_supervised(args))"""
+    """hyperparameter search"""
+    sota_cho = args.dataset == 'Cho2017'
+    sota_eeg109 = args.dataset == 'EEG109'
+    """if sota_cho:
+        for labeled_ratio in [0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1]:# 
+            args.labeled_data = labeled_ratio
+            results_summary.append(main_supervised(args))
+        for train_ratio in [0.12, 0.21, 0.42, 0.64, 0.8]:#
+            args.train_ratio = train_ratio
+            results_summary.append(main_supervised(args))
+    if sota_eeg109:
+        for labeled_ratio in [0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1]:# 
+            args.labeled_data = labeled_ratio
+            results_summary.append(main_supervised(args))
+        for train_ratio in [0.05, 0.1, 0.2, 0.3, 0.4, 0.6, 0.8]:#
+            args.train_ratio = train_ratio
+            results_summary.append(main_supervised(args))"""
     print(results_summary)
     
     
