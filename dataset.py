@@ -11,11 +11,11 @@ from scipy.signal import butter, lfilter
 import os
 import random
 from collections import Counter
-import moabb
+"""import moabb
 from moabb import datasets
 from moabb.paradigms import MotorImagery
 from moabb.paradigms import LeftRightImagery
-from moabb.paradigms import FilterBankMotorImagery
+from moabb.paradigms import FilterBankMotorImagery"""
 import mne
 
 class EEG109_Dataset(Dataset):
@@ -236,7 +236,7 @@ class HaLT12_Dataset(Dataset):
     def __init__(self, args, split_type):
         super(HaLT12_Dataset, self).__init__()
         assert args.train_ratio_all >= args.train_ratio
-        assert args.train_ratio_all + args.val_ratio + args.test_ratio <= 1
+        assert args.train_ratio_all + args.test_ratio <= 1
         assert args.train_ratio_all >= args.train_ratio
         assert args.labeled_data_all >= args.labeled_data
         assert args.train_ratio_all == args.train_ratio or args.labeled_data_all == args.labeled_data
@@ -264,9 +264,11 @@ class HaLT12_Dataset(Dataset):
             zero_flag = [0] * (int(l * args.train_ratio_all) - int(l * args.train_ratio))
             label_flag.extend(zero_flag)
         elif split_type == 'val':
-            #subjects = subject_names[:int(l * args.train_ratio)]
-            subjects = subject_names[int(l * (1 - args.test_ratio - args.val_ratio)): int(l * (1 - args.test_ratio))]
-            label_flag = [1] * (int(l * (1 - args.test_ratio)) - int(l * (1 - args.test_ratio - args.val_ratio)))
+            subjects = subject_names[:int(l * args.train_ratio_all)]
+            label_flag = [1] * int(l * args.train_ratio)
+            # args.train_ratio_all - args.train_ratio subjects will be used but there is no labels
+            zero_flag = [0] * (int(l * args.train_ratio_all) - int(l * args.train_ratio))
+            label_flag.extend(zero_flag)
         else:
             subjects = subject_names[int(l * (1 - args.test_ratio)): ]
             label_flag = [1] * (l - int(l * (1 - args.test_ratio)))
@@ -277,18 +279,34 @@ class HaLT12_Dataset(Dataset):
             s = subjects[i]
             subject_signal = []
             labels = []
-            test_labels = []
             ids = []
             for l in range(len(data[s])):
                 label = data[s][l][1][0]
                 if self.label_map[label] >= 0:
                     subject_signal.append(data[s][l][0][:200])
                     if label_flag[i] == 0:
-                        self.labels.append(-1)
+                        labels.append(-1)
                     else:
-                        self.labels.append(self.label_map[label])
-                    self.ids.append(s) 
+                        labels.append(self.label_map[label])
+                    ids.append(s) 
+            
             subject_signal = torch.stack(subject_signal)
+            g = torch.Generator()
+            g.manual_seed(args.seed)
+            indexes = torch.randperm(subject_signal.shape[0], generator = g)
+            indexes_l = len(indexes)
+            if split_type == 'train':
+                indexes = indexes[:int(indexes_l * (1 - args.val_ratio))]
+            if split_type == 'val':
+                indexes = indexes[int(indexes_l * (1 - args.val_ratio)):]
+            
+            subject_signal = subject_signal[indexes]
+            labels = torch.tensor(labels)[indexes].tolist()
+            ids = torch.tensor(ids)[indexes].tolist()
+            
+            self.labels.extend(labels)
+            self.ids.extend(ids)
+            
             mean = subject_signal.mean(dim = [0, 1], keepdim = True)
             std = subject_signal.std(dim = [0, 1], keepdim = True)
             subject_signal = (subject_signal - mean)/std

@@ -11,18 +11,17 @@ from scipy.signal import butter, lfilter
 import os
 import random
 from collections import Counter
-import moabb
+"""import moabb
 from moabb import datasets
 from moabb.paradigms import MotorImagery
 from moabb.paradigms import LeftRightImagery
-from moabb.paradigms import FilterBankMotorImagery
+from moabb.paradigms import FilterBankMotorImagery"""
 import mne 
 
 class Base_Dataset(Dataset):
     def __init__(self, args, split_type):
         super(Base_Dataset, self).__init__()
         assert args.train_ratio_all >= args.train_ratio
-        assert args.train_ratio_all + args.val_ratio + args.test_ratio <= 1
         assert args.train_ratio_all >= args.train_ratio
         assert args.labeled_data_all >= args.labeled_data
         assert args.train_ratio_all == args.train_ratio or args.labeled_data_all == args.labeled_data
@@ -47,11 +46,12 @@ class Base_Dataset(Dataset):
             ids = torch.tensor(ids)
             test_labels = torch.tensor(test_labels)
             #print(subject_signal.shape, labels.shape, ids.shape, test_labels.shape)
-            g = torch.Generator()
-            g.manual_seed(args.seed)
-            indexes = torch.randperm(subject_signal.shape[0], generator = g)
-            indexes_l = len(indexes)
+           
             if self.split_type == 'train':
+                g = torch.Generator()
+                g.manual_seed(args.seed)
+                indexes = torch.randperm(subject_signal.shape[0], generator = g)
+                indexes_l = len(indexes)
                 l_all = int(indexes_l * args.labeled_data_all)
                 labels = labels[indexes[:l_all]]
                 test_labels = test_labels[indexes[:l_all]]
@@ -137,7 +137,7 @@ class EEG109_Dataset(Base_Dataset):
     """
     def __init__(self, args, split_type):
         super(EEG109_Dataset, self).__init__(args, split_type)
-        
+        assert args.train_ratio_all + args.val_ratio + args.test_ratio <= 1
         data = np.load(args.dataset_path, allow_pickle = True).item()
         random.seed(args.seed)
         subject_names = list([i for i in data.keys() if i not in [43, 88, 89, 92, 100, 104]])
@@ -252,6 +252,7 @@ class HaLT12_Dataset(Base_Dataset):
     # Initialize your data, download, etc.
     def __init__(self, args, split_type):
         super(HaLT12_Dataset, self).__init__(args, split_type)
+        assert args.train_ratio_all + args.test_ratio <= 1
         data = np.load(args.dataset_path, allow_pickle = True).item()
         random.seed(args.seed)
         subject_names = list(range(1, 13))
@@ -265,6 +266,7 @@ class HaLT12_Dataset(Base_Dataset):
         self.test_labels = []
         self.reorder_index = []
         label_flag = []
+        self.split_type = split_type
         if split_type == 'train':
             subjects = subject_names[:int(l * args.train_ratio_all)]
             label_flag = [1] * int(l * args.train_ratio)
@@ -272,9 +274,11 @@ class HaLT12_Dataset(Base_Dataset):
             zero_flag = [0] * (int(l * args.train_ratio_all) - int(l * args.train_ratio))
             label_flag.extend(zero_flag)
         elif split_type == 'val':
-            #subjects = subject_names[:int(l * args.train_ratio)]
-            subjects = subject_names[int(l * (1 - args.test_ratio - args.val_ratio)): int(l * (1 - args.test_ratio))]
-            label_flag = [1] * (int(l * (1 - args.test_ratio)) - int(l * (1 - args.test_ratio - args.val_ratio)))
+            subjects = subject_names[:int(l * args.train_ratio_all)]
+            label_flag = [1] * int(l * args.train_ratio)
+            # args.train_ratio_all - args.train_ratio subjects will be used but there is no labels
+            zero_flag = [0] * (int(l * args.train_ratio_all) - int(l * args.train_ratio))
+            label_flag.extend(zero_flag)
         else:
             subjects = subject_names[int(l * (1 - args.test_ratio)): ]
             label_flag = [1] * (l - int(l * (1 - args.test_ratio)))
@@ -295,12 +299,30 @@ class HaLT12_Dataset(Base_Dataset):
                 subject_signal.append(data[s][l][0][:200])
                 if label_flag[i] == 0:
                     labels.append(-1)
-                    test_labels.append(self.label_map[label])
                 else:
                     labels.append(self.label_map[label])
-                    test_labels.append(self.label_map[label])
+                test_labels.append(self.label_map[label])
                 ids.append(s) 
+
         subject_signal = torch.stack(subject_signal)
+        labels = torch.tensor(labels)
+        test_labels = torch.tensor(test_labels)
+        ids = torch.tensor(ids)
+
+        g = torch.Generator()
+        g.manual_seed(args.seed)
+        indexes = torch.randperm(subject_signal.shape[0], generator = g)
+        indexes_l = len(indexes)
+        if self.split_type == 'train':
+            indexes = indexes[:int(indexes_l * (1 - args.val_ratio))]
+        if self.split_type == 'val':
+            indexes = indexes[int(indexes_l * (1 - args.val_ratio)):]
+        
+        subject_signal = subject_signal[indexes]
+        labels = labels[indexes]
+        test_labels = test_labels[indexes]
+        ids = ids[indexes]
+
         return subject_signal, labels, test_labels, ids
 
 class Shin2017_Dataset(Base_Dataset):
@@ -356,11 +378,11 @@ class Shin2017_Dataset(Base_Dataset):
             split_ids = torch.tensor(split_ids)
             test_labels = torch.tensor(test_labels)
             #print(subject_signal.shape, labels.shape, ids.shape, test_labels.shape, split_ids.shape)
-            g = torch.Generator()
-            g.manual_seed(args.seed)
-            indexes = torch.randperm(subject_signal.shape[0], generator = g)
-            indexes_l = len(indexes)
             if self.split_type == 'train':
+                g = torch.Generator()
+                g.manual_seed(args.seed)
+                indexes = torch.randperm(subject_signal.shape[0], generator = g)
+                indexes_l = len(indexes)
                 l_all = int(indexes_l * args.labeled_data_all)
                 labels = labels[indexes[:l_all]]
                 test_labels = test_labels[indexes[:l_all]]
