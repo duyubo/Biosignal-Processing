@@ -113,7 +113,7 @@ def main_unsupervised(args):
       'EEG2a': DP.EEG2a_Dataset if args.method == 'PSL' else D.EEG2a_Dataset,
       'Cho2017': DP.Cho2017_Dataset if args.method == 'PSL' else D.Cho2017_Dataset,
       'Shin2017': DP.Shin2017_Dataset if args.method == 'PSL' else D.Shin2017_Dataset,
-      'HaLT12':DP.HaLT12_Dataset if args.method == 'PSL' else D.Shin2017_Dataset,
+      'HaLT12':DP.HaLT12_Dataset if args.method == 'PSL' else D.HaLT12_Dataset,
     }
     torch.manual_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
