@@ -209,14 +209,22 @@ class PSL(nn.Module):
         self.n_views = args.n_views
         self.temperature = args.temperature
         self.backbone = backbone
-        self.projection = MLPHead(in_channels = args.out_dim,  mlp_hidden_size = args.mlp_hidden_size, projection_size = args.projection_size)
-        self.diff =  nn.MultiheadAttention(embed_dim = args.projection_size, 
+        self.projection = MLPHead_PSL(in_channels = args.out_dim,  mlp_hidden_size = args.mlp_hidden_size, projection_size = args.projection_size)
+        """self.diff =  nn.MultiheadAttention(embed_dim = args.projection_size, 
                                             num_heads = 4,
                                             dropout=0.0, 
                                             bias=True,
-                                            batch_first=True)
+                                            batch_first=True)"""
+        self.diff1 = nn.Transformer(d_model = args.projection_size, nhead = 4, 
+                num_encoder_layers=1, num_decoder_layers=1, 
+                dim_feedforward=args.projection_size,
+                dropout=0.1, batch_first=True)
+        self.diff2 = nn.Transformer(d_model = args.projection_size, nhead = 4, 
+                num_encoder_layers=1, num_decoder_layers=1, 
+                dim_feedforward=args.projection_size,
+                dropout=0.1, batch_first=True)
         self.final_dim = args.final_dim * (args.final_dim - 1) // 2 + 1 #args.final_dim * args.final_dim  - 1
-        self.header = nn.Sequential(  nn.Linear(args.projection_size , args.projection_size),
+        self.header = nn.Sequential(  nn.Linear(args.projection_size * 2, args.projection_size),
                                       nn.ReLU(),
                                       nn.Linear(args.projection_size, self.final_dim), #
                                       )
@@ -232,18 +240,22 @@ class PSL(nn.Module):
         features2 = features[batch_size:][mask]
         valid_label = labels[mask]
         
-        diff_metrix1, _ = self.diff(query = features1, key = features2, value = features2, need_weights=False)
-        diff_metrix1 = self.ln1(features2) - self.ln2(diff_metrix1)
-        #diff_metrix2, _ = self.diff(query = features2, key = features1, value = features1, need_weights=False)
-        
+        diff_metrix1 = self.diff1(src = features1, tgt = features2)
+        #diff_metrix1 = self.ln1(diff_metrix1)
+        #diff_metrix1 = self.ln1(features2) - self.ln2(diff_metrix1)
+        diff_metrix2 = self.diff1(src = features2, tgt = features1)
+        #diff_metrix2 = self.ln1(features1) - self.ln2(diff_metrix2)
+        #diff_metrix2 = self.ln2(diff_metrix2)
+
         diff_metrix1 = self.backbone.final(diff_metrix1.transpose(1, 2))
         diff_metrix1 = diff_metrix1.squeeze(-1)
+        #print(diff_metrix1.shape)
+        diff_metrix2 = self.backbone.final(diff_metrix2.transpose(1, 2))
+        diff_metrix2 = diff_metrix2.squeeze(-1)
 
-        #diff_metrix2 = self.backbone.final(diff_metrix2.transpose(1, 2))
-        #diff_metrix2 = diff_metrix2.squeeze(-1)
-
-        #diff_metrix = torch.cat([diff_metrix1, diff_metrix2], dim = -1)
-        final_metrix = self.header(diff_metrix1)
+        diff_metrix = torch.cat([diff_metrix1, diff_metrix2], dim = -1)
+        #print(diff_metrix.shape)
+        final_metrix = self.header(diff_metrix)
 
         return final_metrix, valid_label
     def info_nce_loss(self, features, labels, true_labels):
@@ -297,7 +309,7 @@ class PSL(nn.Module):
     def forward(self, x, labels, true_labels = None):
         features = self.backbone.backbone(x)
         features = features.permute(0, 2, 1)
-        #features = self.projection(features)
+        features = self.projection(features)
         loss, pseudo_loss = self.info_nce_loss(features, labels, true_labels)
         
         return loss, pseudo_loss

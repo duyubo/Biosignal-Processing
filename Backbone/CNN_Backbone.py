@@ -59,3 +59,23 @@ class MLPHead(nn.Module):
 
     def forward(self, x):
         return self.net(x)
+
+class Transpose(torch.nn.Module):
+    def forward(self, x):
+        #print(x.shape)
+        x = x.transpose(1, 2)
+        return x
+class MLPHead_PSL(nn.Module):
+    def __init__(self, in_channels, mlp_hidden_size, projection_size):
+        super(MLPHead_PSL, self).__init__()
+        self.net = nn.Sequential(
+            nn.Linear(in_channels, mlp_hidden_size),
+            Transpose(),
+            nn.BatchNorm1d(mlp_hidden_size),
+            Transpose(),
+            nn.ReLU(inplace=True),
+            nn.Linear(mlp_hidden_size, projection_size)
+        )
+
+    def forward(self, x):
+        return self.net(x)
