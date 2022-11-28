@@ -19,18 +19,15 @@
       - read_eeg109.py: 
       - read_emg22.py: 
       - read_ofner.py: 
-  - augmentation.py
-  - dataset.py
-  - dataset_pretrain.py
-  - results.txt
-  - supervised.py
-  - test_singal2vec.py
-  - train.py
-  - unsupervised.py
-  - utils.py
-  - v.py
-  - experiment.sh
-  - experiment_others.sh
+  - augmentation.py: Candidate data augmentation approaches
+  - dataset.py: Dataloaders for each dataset (supervised learning of PSL and supervised & unsupervised learning of the other baseline methods)
+  - dataset_pretrain.py: Dataloader for each dataset (unsupervised learning of PSL)
+  - supervised.py: Supervised learning framework (that calls training functions in train.py)
+  - train.py: Training functions for  un/supervised training, un/supervised evaluation.
+  - unsupervised.py: Unsupervised learning framework (that calls training functions in train.py)
+  - utils.py: Utilization functions
+  - v.py: Visualization fuctions for testing how well the cinstrastive learning backbones can distinguish the difference between different classes
+
 ## Motivation
 
 ## Solution
