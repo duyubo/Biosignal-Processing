@@ -1,7 +1,40 @@
 # Biosignal-Processing
 
 ## Environment Setup
-All necessary envronment are included in environment.yml, after installing anaconda3 on the linux, conda env create -f environment.yml will help install all dependencies.
+All necessary envronment are included in environment.yml, after installing anaconda3 on the linux, 
+```
+conda env create -f environment.yml 
+```
+will help install all dependencies.
+
+## Run Experiments
+```
+python3 unsupervised.py \
+          --method PSL --backbone CNN --lr 0.001 --epochs 200 --dataset EEG109\
+          --dataset_path /home/yubo/BiosignalData/eeg_109_imagery.npy\
+          --seq_length 646 --input_dim 64 --c2 128 --c3 128 --out_dim 64 --kernel 5 --stride 2 --first_kernel 5 \
+          --first_stride 2 --mlp_hidden_size 128 --projection_size 64  --predictor_mlp_hidden_size 512 \
+          --patience 10 --temperature 0.1\
+          --train_ratio 0.8 --train_ratio_all 0.8 --val_ratio 0.1 --test_ratio 0.1 --batch_size 128 \
+          --final_dim 4 --labeled_data_all 0.8 --labeled_data $labeled_data --p1 0.2 --p2 0.2 --p3 0.2 --la 1
+  python3 supervised.py \
+          --method PSL --backbone CNN --lr 0.0001 --epochs 1000 --dataset EEG109 \
+          --dataset_path /home/yubo/BiosignalData/eeg_109_imagery.npy\
+          --seq_length 646 --input_dim 64 --c2 128 --c3 128 --out_dim 64 --kernel 5\
+          --stride 2 --first_kernel 5 --labeled_data $labeled_data \
+          --first_stride 2 --patience 100 --train_ratio 0.8 --val_ratio 0.1 \
+          --test_ratio 0.1 --final_dim 4 --pretrained
+```
+
+
+```train_ratio:``` percent of labeled subjects
+
+```train_ratio_all:``` percent of subjects
+
+```labeled_data:``` percent of labeled data per subject
+
+```labeled_data_all:``` percent of data per subject 
+
 ## Details of Implementations
   - Backbone/
       - CNN_Backbone.py: Contrastive learning backbone of CNN model
