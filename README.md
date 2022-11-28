@@ -85,7 +85,23 @@ There are two key points in our solution:
 ### 2. Semi-supervised learning with both labeled & unlabeled data
 ![](unlabeled_entropy.JPG)
 
-## Current Status && Next Steps
+## Current Status 
+### Sota accuracy on EEG109 dataset
+
+## Next Steps
+### 1. Look for more datasets
+PSL currently only has sota performance on EEG109 datasets and does not have much differences between the other contrastive learning approaches on other datasets.
+### 2. Explore the effectiveness of the transformer based pairwise modules (Theory/Experiment)
+We should figure out why the pairwise difference modules help on EEG19 dataset. We can do this either from mathematic side or ablation study
+### 3. Add more baselines (contrastive learning for biosignal processing)
+We should also add more baselines methods that expeciaffically proposed for biosignal processing. Here are some candidate baselines:
+**Here is a collection of related works/baselines**
+- General contrastive learning. (SimCLR[2], BYOL[1])
+- Supervised contrastive learning (SCL)
+- Contrastive learning for general time series. (TPC[19], TFC[18])
+- Contrastive learning for bio-signals considering variances in subjects.  (BENDR[24], CLOCS[4], SACL[25])
+
+
 ## References
 [1] Grill, Jean-Bastien, et al. "Bootstrap your own latent-a new approach to self-supervised learning." Advances in neural information processing systems 33 (2020): 21271-21284.
 
@@ -120,3 +136,20 @@ There are two key points in our solution:
 [16] Shin, Jaeyoung, et al. "Open access dataset for EEG+ NIRS single-trial classification." IEEE Transactions on Neural Systems and Rehabilitation Engineering 25.10 (2016): 1735-1745.
 
 [17] http://moabb.neurotechx.com/docs/index.html
+
+[18] TFC: Zhang, Xiang, et al. "Self-supervised contrastive pre-training for time series via time-frequency consistency." arXiv preprint arXiv:2206.08496 (2022).
+CLUDA: Ozyurt, Yilmazcan, Stefan Feuerriegel, and Ce Zhang. "Contrastive Learning for Unsupervised Domain Adaptation of Time Series." arXiv preprint arXiv:2206.06243 (2022).
+
+[19] TPC:Tonekaboni, Sana, Danny Eytan, and Anna Goldenberg. "Unsupervised Representation Learning for Time Series with Temporal Neighborhood Coding." International Conference on Learning Representations. 2020.
+
+[20] Emadeldeen Eldele et al. “Time-Series Representation Learning via Temporal and Contextual Contrasting”. In: Proceedings of the Thirtieth International Joint Conference on Artificial Intelligence, IJCAI-21. 2021, pp. 2352–2359.
+
+[21] Yue, Zhihan, et al. "Ts2vec: Towards universal representation of time series." Proceedings of the AAAI Conference on Artificial Intelligence. Vol. 36. No. 8. 2022.
+
+[22]Mohsenvand, Mostafa Neo, Mohammad Rasool Izadi, and Pattie Maes. "Contrastive representation learning for electroencephalogram classification." Machine Learning for Health. PMLR, 2020.
+
+[23]Han, Jinpei, Xiao Gu, and Benny Lo. "Semi-supervised contrastive learning for generalizable motor imagery eeg classification." 2021 IEEE 17th International Conference on Wearable and Implantable Body Sensor Networks (BSN). IEEE, 2021.
+
+[24]Kostas, Demetres, Stephane Aroca-Ouellette, and Frank Rudzicz. "BENDR: using transformers and a contrastive self-supervised learning task to learn from massive amounts of EEG data." Frontiers in Human Neuroscience (2021): 253.
+
+[25]Cheng, Joseph Y., et al. "Subject-aware contrastive learning for biosignals." arXiv preprint arXiv:2007.04871 (2020).
