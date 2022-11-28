@@ -87,6 +87,7 @@ There are two key points in our solution:
 
 ## Current Status 
 ### Sota accuracy on EEG109 dataset
+![](result1.JPG)![](result2.JPG)![](result3.JPG)
 
 ## Next Steps
 ### 1. Look for more datasets
