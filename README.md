@@ -1,5 +1,7 @@
 # Biosignal-Processing
+
 ## Environment Setup
+
 ## Details of Implementations
   - Backbone/
       - CNN_Backbone.py: Contrastive learning backbone of CNN model
@@ -24,15 +26,31 @@
   - v.py: Visualization fuctions for an intuitive observation of whether the constrastive learning backbones can distinguish the differences between different classes
 
 ## Datasets
-EEG109: 64 channel eeg data of 109 subjects recording motor imagery and motor executation [9][10][11] 
-BCI-IV 2a: 22 channel eeg data of 9 subjects recording motor imagery [14]
-EDF78: single channel eeg data of 78 subjects recording eeg signals while the people are sleeping [11][12][13]
-EMG22: 12-channel emg signals of 22 subjects recording basic movements of the fingers and of the wrist and grasping and functional movements [7][8]
-Cho2017: 64-channel eeg signals of 52 subjects recording motor imagery of the left and right hands [15][17]
+- EEG109: 64 channel eeg data of 109 subjects recording motor imagery and motor executation [9][10][11] 
+- BCI-IV 2a: 22 channel eeg data of 9 subjects recording motor imagery [14]
+- EDF78: single channel eeg data of 78 subjects recording eeg signals while the people are sleeping [11][12][13]
+- EMG22: 12-channel emg signals of 22 subjects recording basic movements of the fingers and of the wrist and grasping and functional movements [7][8]
+- Cho2017: 64-channel eeg signals of 52 subjects recording motor imagery of the left and right hands [15][17]
 
-## Motivation
-With some preliminary experiment results we find that the biosignals such as EEG have much differences between subjects. If the biosignal data of a specific person is included in training process, then the DL model can achieve a reasonable 
+## Motivation && Problem Defination
+With some preliminary experiment results, we find that the biosignals such as EEGs of motor imagery are different among subjects. These differences bring the diffculties in cross-subject biosignal classification tasks. For example, if we train the DL model on first n subjects (each subject k data samples) while test the remaining m subjects (each subject k data samples), we will have much lower classification accuracy than training on m+n subjects (each subject has k1 data samples)
+and test on the same m+n subjects but different data samples (each subject has k2 data samples, k1 + k2 = k). 
+
+Although collecting biosignals from a large amount of subjects can help reduce this gap, the cost in time and money are expensive. Most datasets only contain 20 to 40 subjects in total. 
+
+Based on theses observations, we want to explore if we can have a data efficient method that enables the model to learn the essential information from the given subjects and can be applied to unknown subjects. Contrastive learning is a popular approach to help DL models with less labeled data to achieve better performance. However, the previous contrastive learning methods only focus on number of labeled data per class. The cost of looking for & training subjects and label for signals are both non-trivial. Then we propose three experiment settings for our contrastive learning approach:
+
+If there are m+n subjects in total, all training & validation data comes from first n subjects and test data from m subjects. There are no overlapping of subjects between train/val and test.
+- **Labeled Data Per Subject vs Accuracy**: Variation in the number of labeled data per subjects versus accuracy change
+- **Labeled Subjects vs Accuracy**: Variation in the number of labeled subjects versus accuracy change 
+- **Subjects vs Accuracy**: Variation in the number of subjects versus accuracy change, here all avaliable subjects are labeled and there are no unlabeled subjects can be used
+
 ## Solution
+There are two key points in our solution:
+### 1. Label reorganization
+### 2. Semi-supervised learning with both labeled & unlabeled data
+
+
 ## Current Status && Next Steps
 ## References
 [1] Grill, Jean-Bastien, et al. "Bootstrap your own latent-a new approach to self-supervised learning." Advances in neural information processing systems 33 (2020): 21271-21284.
