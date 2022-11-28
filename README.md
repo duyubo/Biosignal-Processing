@@ -26,10 +26,12 @@
   - train.py: Training functions for  un/supervised training, un/supervised evaluation.
   - unsupervised.py: Unsupervised learning framework (that calls training functions in train.py)
   - utils.py: Utilization functions
-  - v.py: Visualization fuctions for testing how well the cinstrastive learning backbones can distinguish the difference between different classes
+  - v.py: Visualization fuctions for an intuitive observation of whether the constrastive learning backbones can distinguish the differences between different classes
+
+## Datasets
 
 ## Motivation
-
+With some preliminary experiment results we find that the biosignals such as EEG have much differences between subjects. If the biosignal data of a specific person is included in training process, then the DL model can achieve a reseaonable 
 ## Solution
 ## Current Status && Next Steps
 ## References
