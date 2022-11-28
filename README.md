@@ -48,8 +48,9 @@ If there are m+n subjects in total, all training & validation data comes from fi
 ## Solution
 There are two key points in our solution:
 ### 1. Label reorganization
+![](data_reorganize.JPG)
 ### 2. Semi-supervised learning with both labeled & unlabeled data
-
+![](unlabeled_entropy.JPG)
 
 ## Current Status && Next Steps
 ## References
