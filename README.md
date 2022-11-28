@@ -1,7 +1,7 @@
 # Biosignal-Processing
 
 ## Environment Setup
-
+All necessary envronment are included in environment.yml, after installing anaconda3 on the linux, conda env create -f environment.yml will help install all dependencies.
 ## Details of Implementations
   - Backbone/
       - CNN_Backbone.py: Contrastive learning backbone of CNN model
