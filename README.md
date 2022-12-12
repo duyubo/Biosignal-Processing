@@ -66,8 +66,9 @@ python3 unsupervised.py \
 - EEG109: 64 channel eeg data of 109 subjects recording motor imagery and motor executation [9][10][11] 
 - BCI-IV 2a: 22 channel eeg data of 9 subjects recording motor imagery [14]
 - EDF78: single channel eeg data of 78 subjects recording eeg signals while the people are sleeping [11][12][13] (This dataset is excluded from the project due to the task type is not related to motor imagery/executation)
-- EMG22: 12-channel emg signals of 22 subjects recording basic movements of the fingers and of the wrist and grasping and functional movements [7][8]
-- Cho2017: 64-channel eeg signals of 52 subjects recording motor imagery of the left and right hands [15][17]
+- EMG22: 12-channel emg signals of 22 subjects recording basic movements of the fingers and of the wrist and grasping and functional movements [7][8] (This dataset is excluded from the project due to the extreme high number of classes: 40)
+- HALT12: 19-channel eeg signals of 12 subjects recording motor imagery of hand/leg/tongue [26][27]
+
 
 ## Motivation && Problem Defination
 With some preliminary experiment results, we find that the biosignals such as EEGs of motor imagery are different among subjects. These differences bring the diffculties in cross-subject biosignal classification tasks. For example, if we train the DL model on first n subjects (each subject k data samples) while test the remaining m subjects (each subject k data samples), we will have much lower classification accuracy than training on m+n subjects (each subject has k1 data samples)
@@ -116,6 +117,7 @@ In our 3 experiment settings, there are a part of the unlabeled data which can n
 ### Sota accuracy on EEG109 dataset
 
 ![](result1.JPG)
+
 | Number of labeled data |  0.01  |   0.1  |   0.2  |   0.4  |   0.6  |   0.8  |    1   |
 |:----------------------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|
 |        Supervised      | 0.2596 | 0.3222 | 0.3646 | 0.4091 | 0.4131 | 0.4364 | 0.4363 |
@@ -150,13 +152,41 @@ In our 3 experiment settings, there are a part of the unlabeled data which can n
 |   PSL (Method 1)   | 0.4495 | 0.4545 | 0.4919 | 0.4897 | 0.5354 | 0.5657 | 0.5818 |
 |   PSL (Method 2)   | 0.4495 | 0.4545 | 0.4919 | 0.4897 | 0.5354 | 0.5657 | 0.5818 |
 
-## Future Directions
-### 1. Look for more datasets
-PSL currently only has sota performance on EEG109 datasets and does not have much differences between the other contrastive learning approaches on other datasets.
-### 2. Explore the effectiveness of the transformer based pairwise modules (Theory/Experiment)
-We should figure out why the pairwise difference modules help on EEG19 dataset. We can do this either from mathematic side or ablation study
-### 3. Add more baselines (contrastive learning for biosignal processing)
-We should also add more baselines methods that expeciaffically proposed for biosignal processing. Here are some candidate baselines:
+### Limited performance on HALT12 dataset
+
+Because the HALT dataset only contains 12 subjects, we only split the training/test subjects by 11:1. Different random seeds bring different combinations of the train/test dataset.
+
+|   Random Seed   |   37   |    0   |   10   | 888888 |
+|:---------------:|:------:|:------:|:------:|:------:|
+| Test Subject Id |   11   |    7   |   10   |    3   |
+|    Supervised   | 0.8356 | 0.3505 | 0.6514 | 0.6571 |
+|      SimCLR     | 0.8142 | 0.3567 | 0.6195 | 0.6258 |
+|    PSL (Ours)   | 0.8413 | 0.3586 | 0.6677 | 0.6165 |
+
+#### Observations & Analysis:
+- Both SiimCLR and PSL do not have obvious improvement compared with supervised learning method.
+- There are differences in cross subjects accuracy. Neither PSL nor SimCLR can reduce the gap between the subjects.
+- Maybe a larger subject number can reduce the gap.
+
+
+## Solutions
+### 1. Explorations on more datasets
+PSL currently only has sota performance on EEG109 datasets and does not have much differences between the other contrastive learning approaches on other datasets. Looking for more datasets (such as Cho2017 [15][17]) with larger subject number may help with the problem. 
+
+Here are some helpful links: 
+1. http://moabb.neurotechx.com/docs/datasets.html#motor-imagery-datasets
+
+2. https://physionet.org/
+
+3. https://openbci.com/community/publicly-available-eeg-datasets/
+
+### 2. Explorations on the effectiveness of the transformer based pairwise modules (Theory/Experiment)
+We should figure out why the pairwise difference modules help on EEG19 dataset. We can do this either from mathematic side or ablation study.
+- Mathematic/theory: a prove of the intra-subject difference moduel can help to reduce the personalization differences.
+- Ablation Study: a breakdown of the accuracy change by deleting each part
+
+### 3. More comprehensive baselines: contrastive learning for biosignal processing
+We should also add more baselines methods that speciaffically proposed for biosignal processing. Here are some candidate baselines:
 **Here is a collection of related works/baselines**
 - General contrastive learning. (SimCLR[2], BYOL[1])
 - Supervised contrastive learning (SCL)
@@ -208,10 +238,14 @@ CLUDA: Ozyurt, Yilmazcan, Stefan Feuerriegel, and Ce Zhang. "Contrastive Learnin
 
 [21] Yue, Zhihan, et al. "Ts2vec: Towards universal representation of time series." Proceedings of the AAAI Conference on Artificial Intelligence. Vol. 36. No. 8. 2022.
 
-[22]Mohsenvand, Mostafa Neo, Mohammad Rasool Izadi, and Pattie Maes. "Contrastive representation learning for electroencephalogram classification." Machine Learning for Health. PMLR, 2020.
+[22] Mohsenvand, Mostafa Neo, Mohammad Rasool Izadi, and Pattie Maes. "Contrastive representation learning for electroencephalogram classification." Machine Learning for Health. PMLR, 2020.
 
-[23]Han, Jinpei, Xiao Gu, and Benny Lo. "Semi-supervised contrastive learning for generalizable motor imagery eeg classification." 2021 IEEE 17th International Conference on Wearable and Implantable Body Sensor Networks (BSN). IEEE, 2021.
+[23] Han, Jinpei, Xiao Gu, and Benny Lo. "Semi-supervised contrastive learning for generalizable motor imagery eeg classification." 2021 IEEE 17th International Conference on Wearable and Implantable Body Sensor Networks (BSN). IEEE, 2021.
 
-[24]Kostas, Demetres, Stephane Aroca-Ouellette, and Frank Rudzicz. "BENDR: using transformers and a contrastive self-supervised learning task to learn from massive amounts of EEG data." Frontiers in Human Neuroscience (2021): 253.
+[24] Kostas, Demetres, Stephane Aroca-Ouellette, and Frank Rudzicz. "BENDR: using transformers and a contrastive self-supervised learning task to learn from massive amounts of EEG data." Frontiers in Human Neuroscience (2021): 253.
 
-[25]Cheng, Joseph Y., et al. "Subject-aware contrastive learning for biosignals." arXiv preprint arXiv:2007.04871 (2020).
+[25] Cheng, Joseph Y., et al. "Subject-aware contrastive learning for biosignals." arXiv preprint arXiv:2007.04871 (2020).
+
+[26] https://figshare.com/collections/A_large_electroencephalographic_motor_imagery_dataset_for_electroencephalographic_brain_computer_interfaces/3917698
+
+[27] Kaya, Murat; Binli, Mustafa Kemal; Ozbay, Erkan; Yanar, Hilmi; Mishchenko, Yuriy (2018): A large electroencephalographic motor imagery dataset for electroencephalographic brain computer interfaces. figshare. Collection. https://doi.org/10.6084/m9.figshare.c.3917698.v1 
